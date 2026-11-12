@@ -77,7 +77,8 @@ jobs:
         with:
           enable-cache: true
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
       - run: pnpm check
       - name: Generated contracts match the server
         run: pnpm contracts:generate && git diff --exit-code -- packages/contracts
@@ -124,10 +125,12 @@ jobs:
           -e DATABASE_URL="postgres://kittum:kittum@127.0.0.1:5432/kittum?sslmode=disable"
           ghcr.io/amacneil/dbmate:2 --migrations-dir /db/migrations --no-dump-schema --wait up
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium
+        working-directory: apps/web
       # The AI judge replays the demo's recorded answers (KITTUM_JUDGE_BACKEND=demo, set by
       # e2e/stack.ts), so the run is deterministic and needs no model server.
-      - run: pnpm --dir apps/web e2e
+      - run: pnpm e2e
+        working-directory: apps/web
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
