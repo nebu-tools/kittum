@@ -1,6 +1,6 @@
 """Records the PubMed records behind the mock title and abstract queue.
 
-Run once from kittum/apps/web: `uv run --no-project python scripts/fetch_records.py`.
+Run once from apps/web: `uv run --no-project python scripts/fetch_records.py`.
 It calls NCBI E-utilities and writes src/data/mock/fixtures/records.json. Tests never call it.
 The PMIDs are a realistic queue for second-line advanced biliary tract cancer: randomised trials
 that belong in it and the first-line, adjuvant, single-arm, other-tumour, and review records that

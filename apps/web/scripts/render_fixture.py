@@ -4,7 +4,7 @@
 # ///
 """Renders the open-access ABC-06 trial into the fixtures the mock workbench API serves.
 
-Run once from kittum/apps/web: `uv run scripts/render_fixture.py`. It downloads the PDF from the
+Run once from apps/web: `uv run scripts/render_fixture.py`. It downloads the PDF from the
 PubMed Central open-data bucket (CC BY 4.0), checks its SHA-256, and writes page PNGs, word boxes,
 and anchors under src/data/mock/fixtures/abc06/. Tests never call it.
 

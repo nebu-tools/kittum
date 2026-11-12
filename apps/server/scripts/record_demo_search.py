@@ -1,6 +1,6 @@
 """Records the PubMed search behind `kittum demo seed`.
 
-Run once from kittum/apps/server: `uv run python scripts/record_demo_search.py`. It runs the
+Run once from apps/server: `uv run python scripts/record_demo_search.py`. It runs the
 demo strategy against NCBI E-utilities and writes the ESearch and EFetch replies to
 src/kittum/app/demo_data/. The demo and the tests replay them; they never call NCBI.
 """

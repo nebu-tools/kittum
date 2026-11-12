@@ -106,4 +106,4 @@ markers = [
 ]
 
 [tool.uv.sources]
-janus-server = { path = "../../../janus/apps/server", editable = true }
+janus-server = { git = "https://github.com/nebu-tools/janus", subdirectory = "apps/server", rev = "3cc4b0a2fa6757f6a1d9a7c0b20c9f01e0966a1e" }

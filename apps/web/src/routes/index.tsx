@@ -305,7 +305,7 @@ function ServerStatus() {
       <span>{status ?? "Checking the server."}</span>
       <span>
         AGPL-3.0-or-later.{" "}
-        <a className="underline" href="https://github.com/sims1253/nebu/tree/main/kittum">
+        <a className="underline" href="https://github.com/nebu-tools/kittum">
           Source
         </a>
       </span>

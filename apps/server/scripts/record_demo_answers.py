@@ -1,7 +1,7 @@
 """Records a live model's answers for `kittum demo seed` to replay.
 
 Seed a demo project with `kittum demo seed --live`, let the worker judge it, then run from
-kittum/apps/server:
+apps/server:
 
     uv run python scripts/record_demo_answers.py <project id>
 
