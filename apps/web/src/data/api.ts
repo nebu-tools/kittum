@@ -215,7 +215,8 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
             slot: c.slot,
             polarity: c.polarity ?? "include",
             text_en: c.text["en"] ?? text(c.text),
-            text_de: c.text["de"] ?? c.text["en"] ?? text(c.text),
+            text_original: text(c.text),
+            language: lang,
             short_label: c.short_label ?? null,
             // Read loosely: the field is optional in the protocol and older contracts lack it.
             exclusion_reason:

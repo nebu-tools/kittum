@@ -576,7 +576,7 @@ function CriteriaList({
             <li key={criterion.id} data-revealed={revealed === criterion.id || undefined}>
               <button
                 type="button"
-                title={`${criterion.text_en}\n${criterion.text_de}`}
+                title={`${criterion.text_en}\n${criterion.text_original}`}
                 onMouseEnter={() => onLit(criterion.id)}
                 onMouseLeave={() => onLit(null)}
                 onFocus={() => onLit(criterion.id)}

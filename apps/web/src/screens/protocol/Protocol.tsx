@@ -653,8 +653,8 @@ function Criteria({
   count: number;
 }) {
   // The second language folds away: the reader reads one wording, the other is a click on.
-  const bilingual = topic.criteria.some((c) => c.text_de !== c.text_en);
-  const [german, setGerman] = useState(false);
+  const bilingual = topic.criteria.some((c) => c.text_original !== c.text_en);
+  const [original, setOriginal] = useState(false);
   const excluding = topic.criteria.filter((c) => c.polarity === "exclude").length;
   // This topic's own count; `count` is the review's, for a review with one topic the same.
   const own = topic.criteria.length || count;
@@ -673,8 +673,8 @@ function Criteria({
             : ""}
         </p>
         {bilingual ? (
-          <Button kind="quiet" size="sm" className="ml-auto" onClick={() => setGerman((g) => !g)}>
-            {german ? "Hide the German wording" : "Show the German wording"}
+          <Button kind="quiet" size="sm" className="ml-auto" onClick={() => setOriginal((o) => !o)}>
+            {original ? "Hide the original wording" : "Show the original wording"}
           </Button>
         ) : null}
       </header>
@@ -690,7 +690,7 @@ function Criteria({
         </thead>
         <tbody>
           {topic.criteria.map((c, index) => (
-            <CriterionRow key={c.id} criterion={c} index={index} labels={labels} german={german} />
+            <CriterionRow key={c.id} criterion={c} index={index} labels={labels} original={original} />
           ))}
         </tbody>
       </table>
@@ -702,12 +702,12 @@ function CriterionRow({
   criterion: c,
   index,
   labels,
-  german,
+  original,
 }: {
   criterion: Criterion;
   index: number;
   labels: ProfileLabels;
-  german: boolean;
+  original: boolean;
 }) {
   return (
     <tr className="border-b border-rule align-baseline last:border-b-0" title={c.id}>
@@ -734,9 +734,9 @@ function CriterionRow({
           <span className="block text-md font-semibold">{c.short_label}</span>
         ) : null}
         <span className="block max-w-[68ch]">{c.text_en}</span>
-        {german && c.text_de !== c.text_en ? (
-          <span className="mt-0.5 block max-w-[68ch] text-sm text-ink-2" lang="de">
-            {c.text_de}
+        {original && c.text_original !== c.text_en ? (
+          <span className="mt-0.5 block max-w-[68ch] text-sm text-ink-2" lang={c.language}>
+            {c.text_original}
           </span>
         ) : null}
         {c.exclusion_reason ? (

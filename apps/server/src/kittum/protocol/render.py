@@ -5,8 +5,10 @@ criterion that means the record meets the condition; for an `exclude` criterion 
 record does not show it. So `not_met` always means "exclude on this criterion", for humans and
 for the judge, and the exclusion reason is the criterion ID.
 
-Interface strings exist in English and German; other languages use the English ones around the
-criterion's own text. A profile may rename the PICO slots in headings ("slot.<slot>" labels).
+A reviewer's rendering takes its interface strings from `_UI`, one entry per language (English
+and German today); a language without an entry falls back to English around the criterion's own
+text, so adding a language is one entry. The judge's renderings are always English. A profile may
+rename the PICO slots in headings ("slot.<slot>" labels).
 
 The judge's renderings are versioned with the judge prompt (`kittum.judge.PROMPT_VERSION`), because
 a recorded request must render again byte for byte. `render_prompt` is the `judge.v2` fragment: the

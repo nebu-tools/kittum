@@ -753,7 +753,7 @@ function FullTextScreen({
                 </div>
                 <p
                   className={`mt-1 text-sm ${isActive || armed ? "" : "line-clamp-2 text-ink-2"}`}
-                  title={c.text_de}
+                  title={c.text_original}
                 >
                   {c.text_en}
                 </p>

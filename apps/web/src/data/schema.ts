@@ -148,7 +148,8 @@ export interface DecisionTiming {
   readonly reveal_shown_at: string | null;
 }
 
-// The protocol as the screens read it: criteria per scope, worded in English and German.
+// The protocol as the screens read it: criteria per scope, worded in English and in the protocol's
+// own language.
 
 const PicoSlot = Schema.Literals([
   "population",
@@ -164,8 +165,10 @@ export const Criterion = Schema.Struct({
   slot: PicoSlot,
   polarity: Schema.Literals(["include", "exclude"]),
   text_en: Schema.String,
-  /** The German wording, or the English one when the protocol has none. */
-  text_de: Schema.String,
+  /** The wording in the protocol's own language, or the English one when it has none there. */
+  text_original: Schema.String,
+  /** The protocol's own language, as a language code. */
+  language: Schema.String,
   /** A word or two for the screening strip; the strip shortens the text when there is none. */
   short_label: Schema.NullOr(Schema.String),
   /** The reason the PRISMA flow names for records excluded on this criterion, if the protocol

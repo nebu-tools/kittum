@@ -10,14 +10,15 @@ A `not_met` stands only if all of these hold:
 
 1. The quote is in the record (`kittum.core.find_quote`) and the record does not try to
    instruct the model.
-2. The criterion has an English or German wording: negation is read only in those languages.
+2. The criterion has a wording in a language whose negation Kittum reads (`LANGUAGES` in
+   `kittum.judge.languages`: English and German).
 3. The quote lies within one sentence.
 4. The quote contains a key term of the condition: the protocol's `keywords` if it has any,
-   otherwise the content words of the en and de wordings. Terms match as whole words with one
-   inflection (-s, -es, -en, -e, -n) and a tiny en/de table. A term that differs from a key term
-   only by a negating compound prefix ("non-smokers", "nicht-") does not count, and a match on a
-   prefixed term is not read.
-5. The quote is positively English or German: it has a function word of those languages (or is
+   otherwise the content words of those wordings. Terms match as whole words with one
+   inflection (-s, -es, -en, -e, -n) and each language's small table of equivalent spellings. A
+   term that differs from a key term only by a negating compound prefix ("non-smokers",
+   "nicht-") does not count, and a match on a prefixed term is not read.
+5. The quote is positively in one of those languages: it has a function word of one (or is
    made only of the condition's own terms and digits), and no token, in any case, that could be
    a function word or negation of another language ("non", "sin", "pas").
 6. The quote's sentence has at most one negation cue, inside the quote, at most three tokens
@@ -80,9 +81,12 @@ import unicodedata
 from typing import TYPE_CHECKING, NamedTuple
 
 from kittum.core import Span, find_quote
+from kittum.judge.languages import LANGUAGES
 from kittum.judge.types import CriterionVerdict
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from kittum.judge.prompt import CriterionAnswer
     from kittum.judge.types import FailedCheck
     from kittum.protocol import Criterion
@@ -105,31 +109,23 @@ def _vocabulary(words: str) -> frozenset[str]:
     return frozenset(words.split())
 
 
-_STOPWORDS = _vocabulary(
-    """a an and are as at be been by for from had has have in into is it its of on or that the
-    their them these this those to was were which who whom with within must should least
-    years year more than less any all other such only also both either each per
-    der die das und oder mit von zu im in ist sind ein eine einer eines den dem des für auf bei
-    als aus mindestens nach wie"""
-)
+def _alternatives(pieces: Iterable[str]) -> str:
+    return "|".join(pieces)
 
-_NEGATION_WORDS = _vocabulary(
-    """no not without never none neither nor nobody nothing absence absent lack lacking naive
-    untreated excluding except cannot didn doesn don isn aren wasn weren hasn haven hadn
-    kein keine keiner keinen keinem keines nicht ohne nie niemals weder ausgenommen"""
-)
+
+_ALL = tuple(LANGUAGES.values())
+
+_STOPWORDS = frozenset().union(*(_vocabulary(lang.stopwords) for lang in _ALL))
+
+_NEGATION_WORDS = frozenset().union(*(_vocabulary(lang.negation) for lang in _ALL))
 
 # Cues anywhere in the quote's sentence that turn its meaning around or make it two-sided.
 _SCOPE_CUES = re.compile(
-    r"\b(excluded|exclude|excluding|exclusion|ineligible|not eligible|were not included|"
-    r"was not included|not enrolled|with or without|with and without|regardless of|"
-    r"irrespective of|whether or not|independent of|independently of|not only|not just|"
-    r"ausgeschlossen|ausschluss|mit oder ohne|unabhängig von|nicht nur)\b",
-    re.IGNORECASE,
+    rf"\b({_alternatives(c for lang in _ALL for c in lang.scope_cues)})\b", re.IGNORECASE
 )
 
 # Languages whose negation Kittum reads. Polarity in any other language cannot be verified.
-POLARITY_LANGUAGES = frozenset({"en", "de"})
+POLARITY_LANGUAGES = frozenset(LANGUAGES)
 
 # Negation cues and common function words of other languages, to notice quotes Kittum cannot read.
 _FOREIGN_NEGATION = _vocabulary(
@@ -145,34 +141,25 @@ _FOREIGN_WORDS = (
 )
 
 
-# Other English and German function words. A quote needs at least one function word to count as
-# English or German.
+# Other function words. A quote needs at least one function word of a language Kittum reads.
 _FUNCTION_WORDS = (
     _STOPWORDS
     | _NEGATION_WORDS
-    | _vocabulary(
-        """after before during but if then there over under up out who whose what when where
-        while upon via versus vs did do does done being can could may might will would
-        wurden wurde werden worden waren war hatten hatte haben hat vor über unter durch gegen
-        bis seit sowie aber zur zum vom beim am"""
-    )
+    | frozenset().union(*(_vocabulary(lang.function_words) for lang in _ALL))
 )
 
-# Short English and German content words that are not function words.
-_SHORT_WORDS = _vocabulary(
-    """aged age old men mg kg ml day days week year arm arms dose rate risk cell lung type stage
-    line oral iv alt jahr tag tage"""
-)
+# Short content words that are not function words.
+_SHORT_WORDS = frozenset().union(*(_vocabulary(lang.short_words) for lang in _ALL))
 
 # Tokens that end a clause between a negation cue and the term it would negate.
-_CLAUSE_BREAKS = _vocabulary(", ; : . ! ? and or but whereas while und oder aber sowie während")
+_CLAUSE_BREAKS = frozenset().union(*(_vocabulary(lang.clause_breaks) for lang in _ALL))
 
 # All-caps tokens shorter than three letters that are known abbreviations, not foreign words.
 _ACRONYMS = _vocabulary("hr ci os iv sc im po ae uk us eu")
 
-# Inflections a term may carry, longest first, and en/de pairs that differ by more.
+# Inflections a term may carry, longest first, and spellings that differ by more.
 _SUFFIXES = ("es", "en", "s", "e", "n")
-_EQUIVALENT = {"chemotherapie": "chemotherapy", "chemotherapies": "chemotherapy"}
+_EQUIVALENT = {k: v for lang in _ALL for k, v in lang.equivalents.items()}
 
 _WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 
@@ -181,21 +168,10 @@ _WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 # before age 18", "did not regularly smoke"), and none may bring in another population ("and
 # smokers of cigars", "compared with"). A shorter quote cannot hide either.
 _QUALIFIER = re.compile(
-    r"\b(before|after|since|until|till|during|ever|every|each|daily|weekly|monthly|yearly|"
-    r"annually|nightly|regularly|occasionally|usually|always|often|frequently|sometimes|rarely|"
-    r"habitually|heavily|previously|formerly|lifetime|history|past|anymore|longer|yet|"
-    r"prior\s+to|at\s+least|at\s+most|more\s+than|less\s+than|fewer\s+than|per|"
-    r"age|aged|ages|old|older|younger|"
-    r"\d+(?:[.,]\d+)?\s*-?\s*(?:years?|yrs?|months?|weeks?|wks?|days?|hours?|hrs?|minutes?|mins?)|"
-    r"vor|nach|seit|bis|während|jemals|je|jede[nmrs]?|täglich|wöchentlich|monatlich|jährlich|"
-    r"regelmäßig|gelegentlich|früher|zuvor|bisher|mindestens|höchstens|alter|alt|älter|jünger|"
-    r"jahre?n?|monate?n?|wochen?|tage?n?)\b",
-    re.IGNORECASE,
+    rf"\b({_alternatives(q for lang in _ALL for q in lang.qualifiers)})\b", re.IGNORECASE
 )
 _COORDINATION = re.compile(
-    r"\b(and|or|as\s+well\s+as|plus|including|but|except|excluding|versus|vs|compared|"
-    r"comparison|than|whereas|while|whilst|unlike|together\s+with|along\s+with|matched|"
-    r"und|oder|sowie|aber|außer|einschließlich|gegenüber|verglichen|sondern)\b|&|(?<=\w)/(?=\w)",
+    rf"\b({_alternatives(c for lang in _ALL for c in lang.coordination)})\b|&|(?<=\w)/(?=\w)",
     re.IGNORECASE,
 )
 
@@ -239,18 +215,10 @@ _RANDOM_ALLOCATION = re.compile(
 # or a section begins. All three match accent-folded text.
 _PARAGRAPH = re.compile(r"\n\s*\n")
 _ENROLMENT = re.compile(
-    r"\b(?:we\s+(?:enrolled|included|recruited|randomi[sz]ed|studied)"
-    r"|(?:were|was)\s+(?:enrolled|included|recruited|randomi[sz]ed|eligible)"
-    r"|inclusion\s+criteri\w*|einschlusskriteri\w*|eingeschlossen\s+wurden"
-    r"|wurden\s+(?:\w+\s+)?eingeschlossen|wir\s+schlossen)\b",
-    re.IGNORECASE,
+    rf"\b(?:{_alternatives(e for lang in _ALL for e in lang.enrolment)})\b", re.IGNORECASE
 )
 _SECTION = re.compile(
-    r"\s*(?:background|introduction|objectives?|aims?|purpose|methods?|design|setting|"
-    r"participants|interventions?|measurements|outcomes?|main\s+outcome\s+measures?|results?|"
-    r"findings|conclusions?|discussion|interpretation|hintergrund|methoden|ergebnisse|"
-    r"schlussfolgerungen?)\s*:",
-    re.IGNORECASE,
+    rf"\s*(?:{_alternatives(t for lang in _ALL for t in lang.sections)})\s*:", re.IGNORECASE
 )
 _EXCLUSION_CONTEXT = re.compile(
     r"\b(?:exclu\w*|esclu\w*|ineligib\w*|inelegib\w*|not\s+eligible|(?:were|was)\s+not\s+included"
@@ -311,10 +279,12 @@ def injection_suspected(text: str) -> bool:
 
 # Words, with a negating compound prefix kept as part of the word ("non-smokers" is not
 # "smokers"), clause punctuation, and sentence ends.
+_NEGATING_PREFIXES = _alternatives(p for lang in _ALL for p in lang.negating_prefixes)
 _TOKEN = re.compile(
-    rf"(?:non|nicht|kein)-[^\W_]+|[^\W_]+|[,;:]|[.!?](?=[{_CLOSERS}]*(?:\s|$))", re.IGNORECASE
+    rf"(?:{_NEGATING_PREFIXES})-[^\W_]+|[^\W_]+|[,;:]|[.!?](?=[{_CLOSERS}]*(?:\s|$))",
+    re.IGNORECASE,
 )
-_PREFIX = re.compile(r"^(?:non|nicht|kein)-")
+_PREFIX = re.compile(rf"^(?:{_NEGATING_PREFIXES})-")
 _PUNCTUATION = frozenset(",;:.!?")
 
 
