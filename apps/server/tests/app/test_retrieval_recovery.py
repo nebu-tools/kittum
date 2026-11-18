@@ -656,7 +656,7 @@ def test_the_contact_address_stays_out_of_what_kittum_keeps_and_logs(
     # run reports keep the failure in plain words and the converter's request, without it.
     run = review.get("enrichment/runs/latest")
     reason = {s["source"]: s for s in run["sources"]}["unpaywall"]["last_failure"]["reason"]
-    # The attempt's own error text is checked in tests/gateway/test_private_values.py: here every
+    # The attempt's own error text is checked in tests/enrich/test_private_values.py: here every
     # transaction is a savepoint of the test's, and the failed enrichment step rolls it back.
     assert reason == "unpaywall is unreachable: the connection broke off (ConnectionError)"
     attempts = [
