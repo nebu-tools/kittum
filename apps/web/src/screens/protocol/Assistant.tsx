@@ -1361,7 +1361,7 @@ function FormView({
                         placeholder: "e.g. Not a randomised controlled trial",
                         onChange: (v) =>
                           editCriterion((x) => {
-                            // Optional, and left out while empty, as the server leaves it out.
+                            // Left out while empty; compiling the draft fills in null.
                             if (v.trim()) x.exclusion_reason = v;
                             else delete x.exclusion_reason;
                           }),
@@ -1752,7 +1752,7 @@ function FormView({
                 onChange={({ strictness, guidance, system_prompt, user_template }) =>
                   editTopic((x) => {
                     const text = guidance.trim() ? guidance : null;
-                    // The defaults stay out of the document, as the server leaves them out.
+                    // The form leaves the defaults out; compiling the draft fills them in.
                     if (strictness === "conservative" && !text && !system_prompt && !user_template)
                       delete x.judge;
                     else

@@ -43,7 +43,7 @@ export type Judge = {
   user_template: string | null;
 };
 
-/** The topic's instructions, with the defaults left out as the server leaves them out. */
+/** The topic's instructions, with Kittum's defaults for what the document leaves out. */
 const judgeOf = (topic: Topic): Judge => ({
   strictness: (topic.judge?.strictness as Strictness | undefined) ?? "conservative",
   guidance: topic.judge?.guidance ?? "",
