@@ -32,6 +32,7 @@ from kittum.gateway.types import (
     SourcePolicy,
     Transport,
     effective_request,
+    public_text,
 )
 
 if TYPE_CHECKING:
@@ -263,7 +264,7 @@ class SourceGateway:
                 response = self._transport.send(request)
             except Exception as error:
                 self._record_attempt(
-                    source, key, number, None, self._elapsed_ms(started), str(error)
+                    source, key, number, None, self._elapsed_ms(started), public_text(str(error))
                 )
                 raise
 

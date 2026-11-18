@@ -25,6 +25,8 @@ from kittum.gateway import (
     SourceGateway,
     SourcePolicy,
     SourceUnavailable,
+    public_text,
+    public_url,
 )
 from kittum.gateway.testing import response
 from kittum.storage import MemoryStore
@@ -204,3 +206,18 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     # The live run asked three times; a fourth has nothing left to answer it.
     with pytest.raises(NotRecorded, match="no recorded response 4"):
         replay.send(HttpRequest(url=UNPAYWALL.replace(ALICE, "bob@example.org")))
+
+
+def test_a_public_url_has_no_contact_address_credential_or_user_info() -> None:
+    asked = (
+        "https://user:secret@eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        "?db=pubmed&term=nicotine+gum&tool=a%40example.org&email=a%40example.org&api_key=k"
+    )
+    assert public_url(asked) == (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=nicotine%20gum"
+    )
+    kept = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=1&tool=kittum"
+    assert public_url(kept) == kept
+    assert public_text("https://api.crossref.org/works/10.1/x?mailto=a%40example.org got 503") == (
+        "https://api.crossref.org/works/10.1/x got 503"
+    )

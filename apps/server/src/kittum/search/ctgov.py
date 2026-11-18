@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
 from kittum.core import Clock, Sha256, SystemClock, new_id
-from kittum.gateway import HttpRequest
+from kittum.gateway import HttpRequest, public_url
 from kittum.search.models import SearchExecution, SearchPlan, SourceError, SourceRecord
 
 if TYPE_CHECKING:
@@ -125,7 +125,9 @@ class CtgovSource:
             url = self._build_url(plan.strategy, next_token)
             resp = self._gateway.fetch("clinicaltrials", HttpRequest(url=url))
             if not 200 <= resp.status < 300:
-                raise SourceError(f"ClinicalTrials.gov returned HTTP {resp.status} for {url}")
+                raise SourceError(
+                    f"ClinicalTrials.gov returned HTTP {resp.status} for {public_url(url)}"
+                )
             body_hash = self._artifacts.put(resp.body)
             raw_hashes.append(body_hash)
 

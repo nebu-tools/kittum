@@ -7,7 +7,10 @@ re-exports every one of them from `kittum.enrich`.
 from datetime import date
 from typing import Literal
 
+from pydantic import field_validator
+
 from kittum.core import Id, Record
+from kittum.gateway import public_url
 
 SourceFormat = Literal["pdf", "xml", "landing"]
 OaVersion = Literal["published", "accepted", "submitted"]
@@ -123,9 +126,14 @@ class WorkIds(Record):
 
 
 class FullTextLookup(Record):
-    """What one full-text source said about a work: the request that asked it, and the file
-    locations it named (none when it has no open copy)."""
+    """What one full-text source said about a work: the request that asked it, without the contact
+    address and credentials, and the file locations it named (none when it has no open copy)."""
 
     source: str
     url: str
     locations: tuple[OaLocation, ...] = ()
+
+    @field_validator("url")
+    @classmethod
+    def _public(cls, url: str) -> str:
+        return public_url(url)

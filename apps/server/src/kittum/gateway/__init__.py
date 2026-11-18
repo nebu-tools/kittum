@@ -35,7 +35,15 @@ from kittum.gateway.recorded import (
 )
 from kittum.gateway.service import MAX_ATTEMPTS, SourceGateway, request_hash
 from kittum.gateway.transport import HttpxTransport, user_agent
-from kittum.gateway.types import Gateway, HttpRequest, HttpResponse, SourcePolicy, Transport
+from kittum.gateway.types import (
+    Gateway,
+    HttpRequest,
+    HttpResponse,
+    SourcePolicy,
+    Transport,
+    public_text,
+    public_url,
+)
 
 __all__ = [
     "CONTACT_PLACEHOLDER",
@@ -58,6 +66,8 @@ __all__ = [
     "Transport",
     "UnknownSource",
     "default_policies",
+    "public_text",
+    "public_url",
     "recording_key",
     "request_hash",
     "source_message",

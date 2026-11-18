@@ -2,14 +2,27 @@
 
 HTTP/2 because some publishers' bot protection answers an HTTP/1.1 client with a challenge page
 instead of the PDF it asked for (link.springer.com did in October 2026).
+
+httpx2 logs every request with its URL at INFO. Its lines go through `public_text`, so the worker
+log never holds the contact address or a credential.
 """
 
 import importlib.metadata
+import logging
 
 import httpx2
 
 from kittum.core import sha256_hex
-from kittum.gateway.types import HttpRequest, HttpResponse, effective_request
+from kittum.gateway.types import HttpRequest, HttpResponse, effective_request, public_text
+
+
+class _PublicUrls(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg, record.args = public_text(record.getMessage()), None
+        return True
+
+
+logging.getLogger("httpx2").addFilter(_PublicUrls())
 
 
 def _version() -> str:

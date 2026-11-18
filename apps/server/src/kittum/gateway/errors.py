@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 from kittum.core import KittumError
+from kittum.gateway.types import public_text
 
 if TYPE_CHECKING:
     from datetime import date
@@ -33,7 +34,8 @@ class SourceBudgetExhausted(GatewayError):
 class SourceUnavailable(GatewayError):
     """Every attempt failed with a status worth retrying, or (with `reason`, and no status) the
     source could not be reached at all, as offline with no recorded response. `body` is the last
-    response's body, when there was one: a source often says in it why it failed."""
+    response's body, when there was one: a source often says in it why it failed. The reason
+    loses the contact address and credentials, as it can quote the request."""
 
     def __init__(
         self,
@@ -43,6 +45,7 @@ class SourceUnavailable(GatewayError):
         reason: str | None = None,
         body: bytes | None = None,
     ) -> None:
+        reason = None if reason is None else public_text(reason)
         super().__init__(
             f"{source} is unreachable: {reason}"
             if reason

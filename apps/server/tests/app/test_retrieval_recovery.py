@@ -15,15 +15,21 @@ another document, and a scan without text is held until the lead assigns it. The
 without a full text goes out as CSV and RIS, with every source tried and why each failed.
 
 Reviewers get 403 from every route of it.
+
+The contact address the sources are asked with stays out of everything Kittum keeps: the ledger,
+the run reports, the gateway's attempts, the jobs, the worker log, and the sealed bundle.
 """
 
 import csv
 import io
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 from uuid import UUID
 
+import httpx2
 import pymupdf
 import pytest
 import rispy
@@ -35,10 +41,12 @@ from kittum.app import FULL_TEXT_DETACHED, job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL
 from kittum.core import FixedClock, new_id
 from kittum.corpus import latest_revision, reports
-from kittum.gateway import HttpRequest, RecordedTransport, SourceGateway
+from kittum.enrich.pmc import IDCONV
+from kittum.gateway import HttpRequest, HttpxTransport, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
-from kittum.ledger import EventDraft, PostgresLedger
-from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
+from kittum.ledger import EventDraft, PostgresLedger, SigningKey
+from kittum.report import seal_bundle
+from kittum.runs import JobSpec, PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.app.record_stack import GUIDELINE_REFERENCES, STACK
@@ -77,8 +85,11 @@ class Sources:
         self.unpaywall_swapped = False
         self.lancet_serves_checklist = False
         self.pmc_swapped = False
+        self.unpaywall_quotes_request = False
 
     def send(self, request: HttpRequest) -> HttpResponse:
+        if self.unpaywall_quotes_request and request.url.startswith("https://api.unpaywall.org/"):
+            raise ConnectionError(f"{request.url} did not answer")
         if self.unpaywall_swapped and request.url == UNPAYWALL.format(
             "10.1186%2Fs12916-026-04943-4"
         ):
@@ -103,7 +114,7 @@ class Review:
         clock = FixedClock(datetime(2026, 10, 28, 12, tzinfo=UTC))
         db = savepoint_db(pg)
         artifacts = MemoryStore()
-        self.pg, self.db, self.ledger = pg, db, PostgresLedger()
+        self.pg, self.db, self.ledger, self.artifacts = pg, db, PostgresLedger(), artifacts
         ctx = AppContext(
             settings=Settings(
                 database_url="unused",
@@ -131,6 +142,7 @@ class Review:
             "update job set run_after = now() + interval '1 day'"
             " where status in ('queued', 'running')"
         )
+        self.ctx = ctx
         self.worker = Worker(db, ctx.queue, job_handlers(ctx), name="t", lease=timedelta(hours=1))  # type: ignore[arg-type]
         self.client = TestClient(create_app(ctx))
         project = self.ok(
@@ -609,3 +621,74 @@ def test_a_retry_with_nothing_left_to_ask_keeps_the_reasons_it_had(
     assert again["carried"] == first[lancet]["attempts"]
     located = review.events(lambda t: t == "retrieval.no_open_access_location")
     assert lancet not in [e.payload["item_ref"] for e in located]
+
+
+def test_the_contact_address_stays_out_of_what_kittum_keeps_and_logs(
+    pg: Tx, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    sources = Sources()
+    sources.europepmc_down = sources.unpaywall_quotes_request = True
+    review = Review(pg, sources, monkeypatch)
+    caplog.set_level(logging.DEBUG)
+    assert review.work() == 1  # the enrichment
+    review.post("retrieval/open-access")
+    assert review.work() == 1
+
+    # Unpaywall's failure quotes the request it failed for. Without Europe PMC there is no PMCID,
+    # so retrieval asks PubMed Central's ID converter, with the address. The run reports keep both
+    # requests, without it.
+    run = review.get("enrichment/runs/latest")
+    reason = {s["source"]: s for s in run["sources"]}["unpaywall"]["last_failure"]["reason"]
+    assert reason.startswith("ConnectionError: https://api.unpaywall.org/v2/10.")
+    assert reason.endswith(" did not answer")
+    attempts = [
+        a for r in review.get("retrieval/open-access/latest")["reports"] for a in r["attempts"]
+    ]
+    assert any(a["url"].startswith(f"{IDCONV}?ids=") for a in attempts)
+    assert all("tool=kittum" in a["url"] for a in attempts if a["url"].startswith(IDCONV))
+
+    # httpx2 logs each request it sends.
+    live = httpx2.Client(transport=httpx2.MockTransport(lambda _: httpx2.Response(404)))
+    HttpxTransport(client=live).send(HttpRequest(url=UNPAYWALL.format(LESOTHO_DOI)))
+    assert f"GET https://api.unpaywall.org/v2/{LESOTHO_DOI} " in caplog.text
+
+    # A job the gateway fails for: the worker logs it, and the job keeps the error.
+    asked = f"{IDCONV}?ids=0&format=json&tool=kittum&email={quote(CONTACT_EMAIL)}"
+    gateway = review.ctx.gateway
+    assert gateway is not None
+
+    def probe(*_: object) -> Any:
+        gateway.fetch("pmc", HttpRequest(url=asked))
+
+    with review.db.transaction() as tx:
+        review.ctx.queue.enqueue(
+            tx, JobSpec(project_id=review.pid, kind="probe", stage_key=str(new_id()), payload={})
+        )
+    assert Worker(review.db, review.ctx.queue, {"probe": probe}, name="probe").run_once()
+    assert f"no recorded response for {IDCONV}?ids=0&format=json&tool=kittum" in caplog.text
+
+    with review.db.transaction() as tx:
+        bundle = seal_bundle(
+            tx,
+            UUID(review.pid),
+            review.artifacts,
+            tmp_path / "bundle",
+            signer=SigningKey.generate(),
+            actor_id=UUID(review.lead),
+            ledger=review.ledger,
+        )
+    files = [f for f in bundle.path.rglob("*") if f.is_file()]
+    assert any(f"{IDCONV}?ids=".encode() in f.read_bytes() for f in files)
+
+    kept = [
+        *(f"{f}: {f.read_bytes().decode(errors='replace')}" for f in files),
+        *(
+            str(row["row"])
+            for table in ("audit_event", "retrieval_run_report", "gateway_attempt", "job")
+            for row in pg.execute(f"select to_jsonb(t)::text as row from {table} t").fetchall()
+        ),
+        caplog.text,
+        *(r.getMessage() for r in caplog.records),
+    ]
+    spelled = {CONTACT_EMAIL, quote(CONTACT_EMAIL), quote(quote(CONTACT_EMAIL))}
+    assert [text for text in kept if any(form in text for form in spelled)] == []

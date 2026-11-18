@@ -38,7 +38,13 @@ import httpx2
 
 from kittum.core import sha256_hex
 from kittum.gateway.errors import GatewayError
-from kittum.gateway.types import HttpRequest, HttpResponse, effective_request
+from kittum.gateway.types import (
+    CREDENTIAL_PARAMS,
+    HttpRequest,
+    HttpResponse,
+    effective_request,
+    public_url,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
@@ -58,8 +64,6 @@ CONTACT_PARAMS = {
 }
 """The query parameter each source takes the contact address in, by host."""
 
-CREDENTIAL_PARAMS = frozenset({"api_key", "apikey", "key", "token", "access_token"})
-"""Query parameters that carry a credential (NCBI's `api_key`), dropped from recording keys."""
 
 _EXTENSIONS = {"application/json": ".json", "application/pdf": ".pdf", "text/html": ".html"}
 
@@ -147,14 +151,14 @@ class RecordedTransport:
             except RecordingRefused:
                 key = None
         if key is None or key not in self._responses:
-            raise NotRecorded(f"no recorded response for {request.url}")
+            raise NotRecorded(f"no recorded response for {public_url(request.url)}")
         entries, in_order = self._responses[key]
         with self._lock:
             number = self._used[key]
             self._used[key] += 1
         if in_order and number >= len(entries):
             raise NotRecorded(
-                f"no recorded response {number + 1} for {request.url}"
+                f"no recorded response {number + 1} for {public_url(request.url)}"
                 f" (the recording has {len(entries)})"
             )
         entry = entries[number if in_order else 0]

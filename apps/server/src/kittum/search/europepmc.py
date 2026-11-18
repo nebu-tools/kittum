@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
 from kittum.core import Clock, Sha256, SystemClock, new_id
-from kittum.gateway import HttpRequest
+from kittum.gateway import HttpRequest, public_url
 from kittum.search.models import SearchExecution, SearchPlan, SourceError, SourceRecord
 from kittum.search.pubmed import EUDRACT_PATTERN, NCT_PATTERN
 
@@ -127,7 +127,7 @@ class EuropePmcSource:
             url = search_url(plan.strategy, cursor=cursor, page_size=self._page_size)
             resp = self._gateway.fetch("europepmc", HttpRequest(url=url))
             if not 200 <= resp.status < 300:
-                raise SourceError(f"Europe PMC returned HTTP {resp.status} for {url}")
+                raise SourceError(f"Europe PMC returned HTTP {resp.status} for {public_url(url)}")
             body_hash = self._artifacts.put(resp.body)
             raw_hashes.append(body_hash)
             try:

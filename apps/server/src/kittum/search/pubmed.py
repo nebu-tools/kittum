@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import quote, urlencode
 
 from kittum.core import Clock, Sha256, SystemClock, new_id
-from kittum.gateway import HttpRequest
+from kittum.gateway import HttpRequest, public_url
 from kittum.search.models import SearchExecution, SearchPlan, SourceError, SourceRecord
 
 if TYPE_CHECKING:
@@ -247,7 +247,7 @@ class PubMedSource:
         """Fetch through the gateway, store the body, and record its hash."""
         resp = self._gateway.fetch("pubmed", HttpRequest(url=url))
         if not 200 <= resp.status < 300:
-            raise SourceError(f"PubMed returned HTTP {resp.status} for {url}")
+            raise SourceError(f"PubMed returned HTTP {resp.status} for {public_url(url)}")
         body_hash = self._artifacts.put(resp.body)
         raw_hashes.append(body_hash)
         return resp.body, body_hash
