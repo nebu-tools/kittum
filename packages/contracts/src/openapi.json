@@ -3291,10 +3291,15 @@
                 "type": "null"
               }
             ]
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
           }
         },
         "required": [
           "content_hash",
+          "version_label",
           "previous",
           "diff"
         ],
@@ -3465,6 +3470,35 @@
         "title": "DomainView",
         "type": "object"
       },
+      "DraftPublish": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "approved_by"
+        ],
+        "title": "DraftPublish",
+        "type": "object"
+      },
       "DraftRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3483,6 +3517,53 @@
           "description"
         ],
         "title": "DraftRequest",
+        "type": "object"
+      },
+      "DraftSave": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "source"
+        ],
+        "title": "DraftSave",
+        "type": "object"
+      },
+      "DraftStart": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "title": "DraftStart",
         "type": "object"
       },
       "EditBody": {
@@ -7141,6 +7222,52 @@
         "title": "ProtocolDiff",
         "type": "object"
       },
+      "ProtocolDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "revision",
+          "source",
+          "base_revision_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProtocolDraft",
+        "type": "object"
+      },
       "ProtocolIssue": {
         "additionalProperties": false,
         "properties": {
@@ -7344,23 +7471,8 @@
             ]
           },
           "published_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Published At"
-          },
-          "status": {
-            "enum": [
-              "draft",
-              "published"
-            ],
-            "title": "Status",
+            "format": "date-time",
+            "title": "Published At",
             "type": "string"
           },
           "version_label": {
@@ -7371,37 +7483,12 @@
         "required": [
           "id",
           "parent_id",
-          "status",
           "version_label",
           "content_hash",
           "created_at",
           "published_at"
         ],
         "title": "ProtocolVersionSummary",
-        "type": "object"
-      },
-      "PublishRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "approved_by": {
-            "$ref": "#/components/schemas/Id"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "required": [
-          "approved_by"
-        ],
-        "title": "PublishRequest",
         "type": "object"
       },
       "PublishRevisionRequest": {
@@ -7433,13 +7520,18 @@
             "title": "Documentation",
             "type": "object"
           },
+          "next_label": {
+            "title": "Next Label",
+            "type": "string"
+          },
           "stored": {
             "$ref": "#/components/schemas/StoredProtocol"
           }
         },
         "required": [
           "stored",
-          "documentation"
+          "documentation",
+          "next_label"
         ],
         "title": "PublishedProtocol",
         "type": "object"
@@ -11010,26 +11102,13 @@
       },
       "StoredProtocol": {
         "additionalProperties": false,
+        "description": "A published version, with its approval.",
         "properties": {
           "approved_by": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Id"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Id"
           },
           "approved_event_id": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Id"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Id"
           },
           "created_at": {
             "format": "date-time",
@@ -11064,23 +11143,8 @@
             "title": "Publish Reason"
           },
           "published_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Published At"
-          },
-          "status": {
-            "enum": [
-              "draft",
-              "published"
-            ],
-            "title": "Status",
+            "format": "date-time",
+            "title": "Published At",
             "type": "string"
           },
           "version": {
@@ -11091,9 +11155,11 @@
           "id",
           "project_id",
           "parent_id",
-          "status",
           "version",
-          "created_at"
+          "created_at",
+          "published_at",
+          "approved_by",
+          "approved_event_id"
         ],
         "title": "StoredProtocol",
         "type": "object"
@@ -16560,6 +16626,250 @@
         ]
       }
     },
+    "/api/projects/{project_id}/protocol-draft": {
+      "delete": {
+        "operationId": "discardProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": true,
+            "schema": {
+              "title": "Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "get": {
+        "description": "The project's open draft; 404 when none is open.",
+        "operationId": "getProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "description": "Open the project's draft, or return the one already open, unchanged. Without a source\nit starts from the published version; 422 if none is published.",
+        "operationId": "startProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "put": {
+        "operationId": "saveProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol-draft/publish": {
+      "post": {
+        "description": "Publish the draft with the lead's approval, under the label Kittum assigns, and delete it,\nin one transaction. 422 if it does not compile.",
+        "operationId": "publishProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftPublish"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
     "/api/projects/{project_id}/protocol-versions": {
       "get": {
         "operationId": "listProtocolVersions",
@@ -16602,59 +16912,6 @@
           }
         },
         "summary": "List Protocol Versions",
-        "tags": [
-          "protocol"
-        ]
-      },
-      "post": {
-        "operationId": "saveProtocolDraft",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "title": "Source",
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StoredProtocol"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Save Protocol Draft",
         "tags": [
           "protocol"
         ]
@@ -16708,69 +16965,6 @@
           }
         },
         "summary": "Get Protocol Version",
-        "tags": [
-          "protocol"
-        ]
-      }
-    },
-    "/api/projects/{project_id}/protocol-versions/{version_id}/publish": {
-      "post": {
-        "operationId": "publishProtocolVersion",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Project Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "version_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Version Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PublishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StoredProtocol"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Publish Protocol Version",
         "tags": [
           "protocol"
         ]

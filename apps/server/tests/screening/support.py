@@ -35,7 +35,7 @@ from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
 from kittum.models.testing import RecordedBackend
 from kittum.people import record_roles
-from kittum.protocol import compile, publish, save_draft
+from kittum.protocol import compile, publish
 from kittum.runs import PostgresJobQueue, Worker
 from kittum.screening import (
     BENCH_JOB,
@@ -161,8 +161,8 @@ def seed_people(tx: Tx) -> People:
 
 
 def publish_protocol(tx: Tx, people: People, ledger: PostgresLedger, mode: str) -> StoredProtocol:
-    draft = save_draft(tx, people.project_id, compile(protocol_source(mode)))
-    return publish(tx, people.project_id, draft.id, people.lead, ledger=ledger)
+    version = compile(protocol_source(mode))
+    return publish(tx, people.project_id, version, people.lead, ledger=ledger)
 
 
 def pubmed_search(

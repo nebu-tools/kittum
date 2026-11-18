@@ -38,6 +38,7 @@ from kittum.storage import MemoryStore
 from tests.app.record_stack import GUIDELINE_REFERENCES, STACK
 from tests.documents.conftest import savepoint_db
 from tests.enrich.support import CONTACT_EMAIL
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -165,13 +166,7 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         people[name] = ok(client.post(f"/api/projects/{pid}/members", json=body), 201)["actor_id"]
     as_sam = {"X-Kittum-Reviewer": people["Sam"]}
     source = yaml.safe_load(PROTOCOL.read_text())
-    version = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{version['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, source, lead)
     for source, path in (
         ("citation_search", DATA / "citation_search.ris"),
         ("guideline_references", GUIDELINE_REFERENCES),

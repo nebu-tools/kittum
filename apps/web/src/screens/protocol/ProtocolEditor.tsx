@@ -2,7 +2,8 @@
 // format: YAML or JSON as `kittum project publish-protocol` takes it, from the form, an example,
 // the published version, or a file. The server reads and checks it and lists the problems beside
 // the text. Before publishing, the lead sees what the version changes against the one every
-// decision reads now. Saved as a revision, it joins the form's history.
+// decision reads now. Every change goes to the project's open draft; saved as a revision, it
+// joins the form's history.
 import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
@@ -13,6 +14,7 @@ import type {
   ProtocolRevision,
   ProtocolSource,
 } from "../../data/schema.ts";
+import type { Draft } from "./draft.ts";
 import { run } from "../../data/workbench.ts";
 import { Button, Field, FileInput, Select, TextInput, failure } from "../../ui/Form.tsx";
 import { Key } from "../../ui/Key.tsx";
@@ -35,6 +37,10 @@ type Check =
       readonly warnings: ReadonlyArray<ProtocolIssue>;
     };
 
+/** Whether a version changes nothing against the published one but the label Kittum gives it. */
+const labelOnly = (preview: DiffPreview) =>
+  preview.diff !== null && (preview.diff.changes ?? []).every((c) => c.path === "version_label");
+
 const show = (value: unknown): string =>
   value === null || value === undefined
     ? "Nothing"
@@ -43,19 +49,23 @@ const show = (value: unknown): string =>
       : JSON.stringify(value);
 
 export function ProtocolEditor({
+  draft,
   onPublished,
   onCancel,
   initialText = null,
-  base = null,
+  baseId = null,
   onRevisionSaved,
   onText,
 }: {
+  /** The project's open draft, which every change here is saved to and which publishing
+   * publishes. */
+  draft: Draft;
   onPublished: (message: string) => void;
   onCancel: (() => void) | null;
   /** The text to start from, such as the form's protocol. */
   initialText?: string | null;
   /** The revision the text comes from; a saved edit names it as its base. */
-  base?: ProtocolRevision | null;
+  baseId?: string | null;
   onRevisionSaved?: (revision: ProtocolRevision) => void;
   /** The text as it is now, and whether the lead changed it here. */
   onText?: (text: string, changed: boolean) => void;
@@ -97,9 +107,14 @@ export function ProtocolEditor({
 
   useEffect(() => onText?.(text, touched), [onText, text, touched]);
 
-  const load = (source: string) => {
+  const write = (source: string) => {
     setText(source);
     setTouched(true);
+    draft.change(source, baseId);
+  };
+
+  const load = (source: string) => {
+    write(source);
     setCheck({ state: "unchecked" });
     setError(null);
     editor.current?.focus();
@@ -141,8 +156,8 @@ export function ProtocolEditor({
   };
 
   const fresh = check.state === "valid" && check.text === text;
-  const unchanged =
-    fresh && check.preview.diff !== null && check.preview.diff.changes?.length === 0;
+  // The published version again, under the next label: Kittum refuses to publish it.
+  const unchanged = fresh && labelOnly(check.preview);
   const modeChanged = fresh && (check.preview.diff?.mode_changes.length ?? 0) > 0;
 
   const saveRevision = async () => {
@@ -155,9 +170,10 @@ export function ProtocolEditor({
           projectId: project.id,
           as: me.actor_id,
           source: check.source,
-          baseId: base?.id ?? null,
+          baseId,
         }),
       );
+      await draft.discard().catch(() => undefined);
       onRevisionSaved?.(saved);
     } catch (e) {
       setError(failure(e, "Kittum could not save the revision."));
@@ -177,14 +193,9 @@ export function ProtocolEditor({
     setBusy(true);
     setError(null);
     try {
-      const stored = await run(
-        workbench.publishProtocol({
-          projectId: project.id,
-          as: me.actor_id,
-          source: check.source,
-          reason: reason.trim() || null,
-        }),
-      );
+      // The draft holds the text as checked, whether the lead typed it here or not.
+      draft.change(check.text, baseId);
+      const stored = await draft.publish(me.actor_id, reason.trim() || null);
       await router.invalidate();
       onPublished(
         `Published version ${stored.version.protocol.version_label}. The ledger records your approval.`,
@@ -248,10 +259,7 @@ export function ProtocolEditor({
           aria-label="Protocol"
           spellCheck={false}
           value={text}
-          onChange={(e) => {
-            setText(e.currentTarget.value);
-            setTouched(true);
-          }}
+          onChange={(e) => write(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
               e.preventDefault();
@@ -301,7 +309,7 @@ export function ProtocolEditor({
             </Field>
             <div className="flex flex-wrap gap-3">
               <Button primary type="submit" disabled={busy}>
-                {busy ? "Publishing" : "Publish this version"}
+                {busy ? "Publishing" : `Publish version ${check.preview.version_label}`}
               </Button>
               {onRevisionSaved ? (
                 <Button onClick={() => void saveRevision()} disabled={busy}>
@@ -395,7 +403,7 @@ function Changes({ preview }: { preview: DiffPreview }) {
         <p className="mt-1 text-sm text-ink-2">
           Nothing is published yet, so there is nothing to compare it with.
         </p>
-      ) : (diff.changes?.length ?? 0) === 0 ? (
+      ) : labelOnly(preview) ? (
         <p className="mt-1 text-sm text-ink-2" data-testid="protocol-diff">
           This is the published version without changes. Edit it first.
         </p>

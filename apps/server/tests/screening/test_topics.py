@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from kittum.api import AppContext, create_app
 from kittum.core import new_id
 from kittum.ledger import PostgresLedger
-from kittum.protocol import compile, publish, save_draft
+from kittum.protocol import compile, publish
 from kittum.screening import InvalidDecision, Screening, StageSpec
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
@@ -57,8 +57,7 @@ def test_topic_id_scopes_queue_and_progress(database: Database, tmp_path: Path) 
     artifacts = MemoryStore()
     with database.transaction() as tx:
         people = seed_people(tx)
-        draft = save_draft(tx, people.project_id, compile(two_topics()))
-        stored = publish(tx, people.project_id, draft.id, people.lead, ledger=ledger)
+        stored = publish(tx, people.project_id, compile(two_topics()), people.lead, ledger=ledger)
         records = screening_records(
             tx, people, [central_import(tx, people, ledger, artifacts)], ledger
         )

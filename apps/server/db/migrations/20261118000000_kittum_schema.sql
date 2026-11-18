@@ -535,8 +535,9 @@ create trigger verdict_immutable
 -- ---------------------------------------------------------------------------------------------
 -- protocol
 
--- Protocol versions. A version is saved as a draft and frozen when published. The
--- document and its hash never change; publishing only fills in the approval.
+-- Published protocol versions. A row is written when a version is published, with its approval,
+-- and never changes after: the document, its hash, and the approval are all frozen. The draft a
+-- lead is writing lives in protocol_draft until it is published.
 
 create table protocol_version (
     id uuid primary key default uuidv7(),
@@ -545,19 +546,13 @@ create table protocol_version (
     version_label text not null,
     content_hash char(64) not null,
     document jsonb not null,
-    status text not null default 'draft' check (status in ('draft', 'published')),
     created_at timestamptz not null default now(),
-    published_at timestamptz,
-    approved_by uuid references actor (id),
-    approved_event_id uuid references audit_event (event_id),
+    published_at timestamptz not null,
+    approved_by uuid not null references actor (id),
+    approved_event_id uuid not null references audit_event (event_id),
     publish_reason text,
     unique (project_id, content_hash),
-    check (
-        (status = 'draft' and published_at is null and approved_by is null
-            and approved_event_id is null)
-        or (status = 'published' and published_at is not null and approved_by is not null
-            and approved_event_id is not null)
-    )
+    unique (project_id, version_label)
 );
 
 create index protocol_version_by_project on protocol_version (project_id, created_at);
@@ -565,24 +560,7 @@ create index protocol_version_by_project on protocol_version (project_id, create
 create function protocol_version_is_frozen() returns trigger
 language plpgsql as $$
 begin
-    if tg_op = 'DELETE' then
-        if old.status = 'published' then
-            raise exception 'protocol_version % is published and frozen', old.id;
-        end if;
-        return old;
-    end if;
-    if old.status = 'published' then
-        raise exception 'protocol_version % is published and frozen', old.id;
-    end if;
-    if new.project_id <> old.project_id
-        or new.parent_id is distinct from old.parent_id
-        or new.version_label <> old.version_label
-        or new.content_hash <> old.content_hash
-        or new.document <> old.document
-        or new.created_at <> old.created_at then
-        raise exception 'protocol_version % content is immutable', old.id;
-    end if;
-    return new;
+    raise exception 'protocol_version % is published and frozen', old.id;
 end;
 $$;
 
@@ -1179,6 +1157,28 @@ create trigger assist_revision_append_only
     for each row execute function assist_revision_is_append_only();
 
 -- ---------------------------------------------------------------------------------------------
+-- protocol draft
+
+-- The protocol a project's leads are writing and have not published (kittum.protocol.draft). A
+-- project has at most one open draft, which everyone on the project edits. The source is the text
+-- as typed, YAML or JSON, and need not compile. Every save raises the revision, and a save or a
+-- publication that names an older revision is refused, so no one overwrites a change they have not
+-- seen. Publishing the draft deletes it in the same transaction; so does discarding it. A draft is
+-- not in the ledger, and no sealed bundle holds it.
+
+create table protocol_draft (
+    id uuid primary key default uuidv7(),
+    project_id uuid not null references project (id),
+    revision integer not null check (revision > 0),
+    source text not null,
+    base_revision_id uuid references assist_revision (id),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create unique index protocol_draft_one_per_project on protocol_draft (project_id);
+
+-- ---------------------------------------------------------------------------------------------
 -- appraisal
 
 -- Risk-of-bias appraisals (DESIGN.md, "Appraisal"). One appraisal per report, instrument, and
@@ -1403,6 +1403,7 @@ drop table project_member;
 drop table appraisal_override;
 drop table appraisal_answer;
 drop table appraisal;
+drop table protocol_draft;
 drop table assist_revision;
 drop function assist_revision_is_append_only;
 drop table extraction_acceptance;

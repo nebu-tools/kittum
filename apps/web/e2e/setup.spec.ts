@@ -199,14 +199,14 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await expect(issue).toHaveCount(1);
     await expect(issue).toContainText("search_topics[0].mode");
     await expect(issue).toContainText("Input should be 'M1', 'M2', 'M3' or 'S', got 'M7'");
-    await expect(page.getByRole("button", { name: "Publish this version" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Publish version/ })).toHaveCount(0);
 
     await editor.fill(readFileSync(PROTOCOL, "utf8"));
     await editor.press("Control+Enter");
     await expect(page.getByTestId("protocol-check")).toContainText("No problems found");
     await expect(page.getByTestId("protocol-check")).toContainText("The first version");
     await page.getByLabel(/^Reason/).fill("The protocol as approved by the steering group.");
-    await page.getByRole("button", { name: "Publish this version" }).click();
+    await page.getByRole("button", { name: "Publish version 0.3" }).click();
     await expect(page.getByTestId("protocol-notice")).toHaveText(
       "Published version 0.3. The ledger records your approval.",
     );
@@ -226,14 +226,13 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     // An unedited version changes nothing and cannot be published.
     await editor.press("Control+Enter");
     await expect(page.getByTestId("protocol-diff")).toContainText("without changes");
-    await expect(page.getByRole("button", { name: "Publish this version" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Publish version/ })).toHaveCount(0);
 
-    const second = (await editor.inputValue())
-      .replace("version_label: '0.3'", "version_label: '0.4'")
-      .replace(
-        "Adults (18 years or older) who smoke tobacco.",
-        "Adults (18 years or older) who smoke tobacco daily or occasionally.",
-      );
+    // The label is left as it is: Kittum publishes the next version as 0.4.
+    const second = (await editor.inputValue()).replace(
+      "Adults (18 years or older) who smoke tobacco.",
+      "Adults (18 years or older) who smoke tobacco daily or occasionally.",
+    );
     writeFileSync(join(versions, "second.yaml"), second);
     await editor.fill(second);
     await editor.press("Control+Enter");
@@ -245,7 +244,7 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
       /^search_topics\[TRIALS\]\.criteria\[POP\]\.text\.enAdults \(18 years or older\) who smoke tobacco\.Adults \(18 years or older\) who smoke tobacco daily or occasionally\.$/,
     ]);
     await page.getByLabel(/^Reason/).fill("Occasional smokers are eligible too.");
-    await page.getByRole("button", { name: "Publish this version" }).click();
+    await page.getByRole("button", { name: "Publish version 0.4" }).click();
     await expect(page.getByTestId("protocol-notice")).toContainText("Published version 0.4");
   });
 

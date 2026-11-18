@@ -44,7 +44,7 @@ from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry, OpenAICompatibleBackend
 from kittum.models.testing import RecordedBackend
 from kittum.people import record_roles
-from kittum.protocol import compile, publish, save_draft
+from kittum.protocol import compile, publish
 from kittum.runs import PostgresJobQueue, Worker
 from kittum.screening import (
     JUDGE_JOB,
@@ -451,8 +451,7 @@ def build(
     ledger = PostgresLedger()
     with db.transaction() as tx:
         people = seed_people(tx, name)
-        draft = save_draft(tx, people.project_id, compile(source))
-        stored = publish(tx, people.project_id, draft.id, people.lead, ledger=ledger)
+        stored = publish(tx, people.project_id, compile(source), people.lead, ledger=ledger)
     config = JudgeConfig(id=config_id, model_id=RECIPE.id, prompt_version=PROMPT_VERSION)
     return ReviewWorld(db, ledger, Screening.postgres(ledger), people, stored, topic, scope, config)
 

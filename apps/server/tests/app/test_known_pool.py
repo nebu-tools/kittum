@@ -21,6 +21,7 @@ from kittum.models import ModelRegistry
 from kittum.runs import PostgresJobQueue, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -93,15 +94,7 @@ class Project:
                 mode_rationale={"en": "Complete the known pool."},
                 audit={"sentinel_percent": "0", "random_audit_percent": "0"},
             )
-        draft = self.ok(
-            self.client.post(f"/api/projects/{self.pid}/protocol-versions", json=source), 201
-        )
-        self.ok(
-            self.client.post(
-                f"/api/projects/{self.pid}/protocol-versions/{draft['id']}/publish",
-                json={"approved_by": self.lead},
-            )
-        )
+        publish_through_api(self.client, self.pid, source, self.lead)
         body = {
             "plan": {
                 "topic_id": "TRIALS",

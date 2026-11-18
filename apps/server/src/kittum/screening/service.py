@@ -329,8 +329,6 @@ class Screening:
 
         def decide(command: Command, state: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             stored = state["stored"]
-            if stored.status != "published":
-                raise InvalidDecision("screening needs a published protocol version")
             protocol = stored.version.protocol
             topic = topic_for(protocol, spec.scope_id, spec.topic_id)
             if topic.id in state["open_topics"]:
@@ -778,10 +776,6 @@ class Screening:
 
         def decide(command: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             row, stored = st["stage"], st["stored"]
-            if stored.status != "published":
-                raise InvalidDecision(
-                    "A stage is re-judged only under a published protocol version."
-                )
             after_hash = stored.version.content_hash
             if after_hash == row["protocol_hash"]:
                 raise InvalidDecision("The stage reads with this protocol version already.")

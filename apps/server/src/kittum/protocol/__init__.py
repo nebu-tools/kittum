@@ -4,8 +4,11 @@ The protocol is versioned JSON with a content hash, and it is the source of trut
 decision. Exclusion reasons are criterion IDs.
 
     version = compile(yaml_text)               # validated, cross-checked, hashed
-    stored = save_draft(tx, project_id, version)
-    publish(tx, project_id, stored.id, approver_id, ledger=ledger)   # frozen, ledger event
+    publish(tx, project_id, version, approver_id, ledger=ledger)   # labelled, frozen, ledger event
+
+What a lead is still writing is the project's one open draft (`start_draft`, `save_draft`,
+`publish_draft`), saved by revision so no one overwrites a change they have not seen. A draft is
+not in the ledger or in any sealed bundle.
 
 Criteria render as the question a reviewer answers (`render_question`) and as the prompt
 fragment the AI judge answers with a verbatim quote (`render_prompt` for `judge.v2`;
@@ -27,6 +30,15 @@ from kittum.protocol.compiler import (
     strategy_warnings,
 )
 from kittum.protocol.diffing import FieldChange, ModeChange, ProtocolDiff, diff
+from kittum.protocol.draft import (
+    ProtocolDraft,
+    StaleDraft,
+    discard_draft,
+    get_draft,
+    publish_draft,
+    save_draft,
+    start_draft,
+)
 from kittum.protocol.model import (
     AuditPlan,
     Comparator,
@@ -72,11 +84,12 @@ from kittum.protocol.store import (
     ProtocolStore,
     StoredProtocol,
     get_version,
+    labelled,
     latest_published,
     list_versions,
+    next_label,
     publish,
     register_attribution,
-    save_draft,
 )
 
 __all__ = [
@@ -104,6 +117,7 @@ __all__ = [
     "PostgresProtocolStore",
     "PressReview",
     "ProtocolDiff",
+    "ProtocolDraft",
     "ProtocolError",
     "ProtocolIssue",
     "ProtocolStateError",
@@ -118,25 +132,32 @@ __all__ = [
     "Source",
     "SourcePlan",
     "Stage",
+    "StaleDraft",
     "StoppingPlan",
     "StoredProtocol",
     "StrategyDialect",
     "compile",
     "diff",
+    "discard_draft",
     "documentation_level",
+    "get_draft",
     "get_version",
+    "labelled",
     "latest_published",
     "list_versions",
+    "next_label",
     "path_of",
     "protocol_hash",
     "protocol_warnings",
     "publish",
+    "publish_draft",
     "register_attribution",
     "render_prompt",
     "render_prompt_criterion",
     "render_prompt_rules",
     "render_question",
     "save_draft",
+    "start_draft",
     "strategy_dialect",
     "strategy_problems",
     "strategy_warnings",

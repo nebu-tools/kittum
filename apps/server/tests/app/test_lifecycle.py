@@ -28,6 +28,7 @@ from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.screening import BENCH_JOB, JUDGE_JOB
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -89,18 +90,7 @@ def test_a_project_from_nothing_to_an_open_stage(empty_database: Database, tmp_p
     refused = client.post(f"/api/projects/{pid}/screening/stages", json=stage)
     assert refused.status_code == 409 and "publish the protocol" in refused.text
 
-    draft = ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions", json=yaml.safe_load(PROTOCOL.read_text())
-        ),
-        201,
-    )
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, yaml.safe_load(PROTOCOL.read_text()), lead)
     published = ok(client.get(f"/api/projects/{pid}/protocol"))
     assert published["documentation"] == {"TRIALS": "complete"}
 
@@ -317,13 +307,7 @@ def test_a_targeted_search_screens_with_a_pool_and_no_auditor(
         mode_rationale={"en": "Confounder search for the team's own model."},
         audit={"sentinel_percent": "0", "random_audit_percent": "0"},
     )
-    draft = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, source, lead)
     assert ok(client.get(f"/api/projects/{pid}/protocol"))["documentation"] == {"TRIALS": "working"}
     body = {
         "plan": {"topic_id": "TRIALS", "source": "central", "platform": "Wiley", "strategy": "x"},

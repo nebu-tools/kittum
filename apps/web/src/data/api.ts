@@ -169,6 +169,7 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
     version_id: published.stored.id,
     content_hash: published.stored.version.content_hash,
     published_at: published.stored.published_at ?? null,
+    next_label: published.next_label,
     protocol: {
       title: text(protocol.title),
       version_label: protocol.version_label,
@@ -268,14 +269,24 @@ export const makeApiWorkbench = (): Workbench => ({
   previewProtocol: ({ projectId, source }) =>
     call((api) => api.previewProtocolDiff(projectId, { payload: source })),
 
-  publishProtocol: ({ projectId, as, source, reason }) =>
+  openDraft: (projectId) => orNull(call((api) => api.getProtocolDraft(projectId, undefined))),
+
+  startDraft: ({ projectId, source, baseRevisionId }) =>
     call((api) =>
-      Effect.gen(function* () {
-        const draft = yield* api.saveProtocolDraft(projectId, { payload: source });
-        return yield* api.publishProtocolVersion(projectId, draft.id, {
-          payload: { approved_by: as, reason },
-        });
+      api.startProtocolDraft(projectId, {
+        payload: { source, base_revision_id: baseRevisionId },
       }),
+    ),
+
+  saveDraft: ({ projectId, revision, source }) =>
+    call((api) => api.saveProtocolDraft(projectId, { payload: { revision, source } })),
+
+  discardDraft: ({ projectId, revision }) =>
+    call((api) => api.discardProtocolDraft(projectId, { params: { revision } })),
+
+  publishDraft: ({ projectId, as, revision, reason }) =>
+    call((api) =>
+      api.publishProtocolDraft(projectId, { payload: { revision, approved_by: as, reason } }),
     ),
 
   assistModel: ({ projectId, as }) =>

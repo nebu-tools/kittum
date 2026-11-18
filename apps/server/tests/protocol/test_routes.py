@@ -1,3 +1,4 @@
+import json
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -171,59 +172,99 @@ def api(tmp_path: Path) -> Iterator[tuple[TestClient, dict[str, Any]]]:
 
 
 @pytest.mark.postgres
-def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, Any]]) -> None:
+def test_api_writes_a_draft_and_publishes_it(api: tuple[TestClient, dict[str, Any]]) -> None:
     client, ids = api
-    base = f"/api/projects/{ids['project']}/protocol-versions"
+    draft_url = f"/api/projects/{ids['project']}/protocol-draft"
+    versions = f"/api/projects/{ids['project']}/protocol-versions"
+    text = example_text(GERMAN)
 
-    created = client.post(base, json=example_source(GERMAN))
-    assert created.status_code == 201
-    draft = created.json()
-    assert draft["status"] == "draft"
-    assert draft["version"]["content_hash"] == _hash(GERMAN)
-    assert client.post(base, json=example_source(GERMAN)).json()["id"] == draft["id"]
+    assert client.get(draft_url).status_code == 404
+    # Nothing is published, so a draft needs a source to start from.
+    assert client.post(draft_url, json={}).status_code == 422
+    started = client.post(draft_url, json={"source": text})
+    assert started.status_code == 200
+    draft = started.json()
+    assert (draft["revision"], draft["source"]) == (1, text)
+    # Starting again returns the open draft, not a second one.
+    assert client.post(draft_url, json={"source": "title: other"}).json() == draft
 
-    denied = client.post(f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["system"])})
+    # A save names the revision it was written on; an older one is refused with the draft.
+    saved = client.put(draft_url, json={"revision": 1, "source": text + "\n"}).json()
+    assert saved["revision"] == 2
+    stale = client.put(draft_url, json={"revision": 1, "source": "mine"})
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["draft"] == saved
+    assert client.get(draft_url).json() == saved
+
+    publish = f"{draft_url}/publish"
+    denied = client.post(publish, json={"revision": 2, "approved_by": str(ids["system"])})
     assert denied.status_code == 403  # not the project's lead
+    behind = client.post(publish, json={"revision": 1, "approved_by": str(ids["approver"])})
+    assert behind.status_code == 409
+    assert behind.json()["detail"]["draft"] == saved
 
-    published = client.post(
-        f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["approver"])}
-    )
+    published = client.post(publish, json={"revision": 2, "approved_by": str(ids["approver"])})
     assert published.status_code == 200
     body = published.json()
-    assert body["status"] == "published"
     assert body["approved_by"] == str(ids["approver"])
-
-    again = client.post(f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["approver"])})
+    assert body["version"]["content_hash"] == _hash(GERMAN)
+    assert client.get(draft_url).status_code == 404  # publishing removed the draft
+    again = client.post(publish, json={"revision": 2, "approved_by": str(ids["approver"])})
     assert again.status_code == 409
+    assert again.json()["detail"]["draft"] is None
 
-    listed = client.get(base).json()
-    assert [(v["id"], v["status"], v["version_label"]) for v in listed] == [
-        (draft["id"], "published", "1.0")
-    ]
-    fetched = client.get(f"{base}/{draft['id']}").json()
+    listed = client.get(versions).json()
+    assert [(v["id"], v["version_label"]) for v in listed] == [(body["id"], "1.0")]
+    fetched = client.get(f"{versions}/{body['id']}").json()
     assert fetched == body
     protocol = fetched["version"]["protocol"]
     assert protocol["default_language"] == "de"
     assert [q["id"] for q in protocol["questions"]] == ["a1", "a2", "b1", "b2"]
     assert [t["mode"] for t in protocol["search_topics"]] == ["M1", "M2"]
-    assert client.get(f"{base}/{new_id()}").status_code == 404
+    assert client.get(f"{versions}/{new_id()}").status_code == 404
+    in_force = client.get(f"/api/projects/{ids['project']}/protocol").json()
+    assert in_force["next_label"] == "1.1"
 
     with psycopg.connect(ids["url"], row_factory=dict_row) as conn:
         event = conn.execute(
             "select type, actor_id, payload from audit_event where event_id = %s",
             (body["approved_event_id"],),
         ).fetchone()
+        types = conn.execute(
+            "select type from audit_event where project_id = %s", (ids["project"],)
+        ).fetchall()
     assert event is not None
     assert (event["type"], str(event["actor_id"])) == (PUBLISHED_EVENT, str(ids["approver"]))
-    assert event["payload"]["content_hash"] == draft["version"]["content_hash"]
+    assert event["payload"]["content_hash"] == body["version"]["content_hash"]
+    assert types == [{"type": PUBLISHED_EVENT}]  # saving a draft is not a ledger event
+
+    # The next draft starts from the published version, which it can only follow.
+    following = client.post(draft_url, json={}).json()
+    assert following["revision"] == 1
+    assert compile(following["source"]).content_hash == _hash(GERMAN)
+    unchanged = client.post(publish, json={"revision": 1, "approved_by": str(ids["approver"])})
+    assert unchanged.status_code == 409
+    assert "unchanged" in unchanged.json()["detail"]
+    discarded = client.delete(draft_url, params={"revision": 1})
+    assert discarded.status_code == 204
+    assert client.get(draft_url).status_code == 404
+    assert client.delete(draft_url, params={"revision": 1}).status_code == 409
 
 
 @pytest.mark.postgres
-def test_api_rejects_an_invalid_draft(api: tuple[TestClient, dict[str, Any]]) -> None:
+def test_api_rejects_a_draft_that_does_not_compile(
+    api: tuple[TestClient, dict[str, Any]],
+) -> None:
     client, ids = api
+    draft_url = f"/api/projects/{ids['project']}/protocol-draft"
     broken = example_source(GERMAN)
     broken["search_topics"][1]["scopes"].append("zz")
-    response = client.post(f"/api/projects/{ids['project']}/protocol-versions", json=broken)
+    # A draft holds what was typed, compiling or not.
+    draft = client.post(draft_url, json={"source": json.dumps(broken)}).json()
+    response = client.post(
+        f"{draft_url}/publish",
+        json={"revision": draft["revision"], "approved_by": str(ids["approver"])},
+    )
     assert response.status_code == 422
     (issue,) = response.json()["detail"]["issues"]
     assert issue == {
@@ -231,6 +272,7 @@ def test_api_rejects_an_invalid_draft(api: tuple[TestClient, dict[str, Any]]) ->
         "message": "unknown scope 'zz'; a topic covers review questions (a1, a2, b1, b2)",
     }
     assert client.get(f"/api/projects/{ids['project']}/protocol-versions").json() == []
+    assert client.get(draft_url).json() == draft
 
 
 MALFORMED = {
@@ -262,15 +304,3 @@ def test_validate_reports_malformed_sources_as_issues(case: str) -> None:
     report = response.json()
     assert report["ok"] is False
     assert any(i["path"] == path and message in i["message"] for i in report["issues"]), report
-
-
-@pytest.mark.postgres
-def test_api_rejects_a_malformed_draft_with_422(api: tuple[TestClient, dict[str, Any]]) -> None:
-    client, ids = api
-    source = example_source()
-    source["questions"] = 1
-    source["default_language"] = ["de"]
-    response = client.post(f"/api/projects/{ids['project']}/protocol-versions", json=source)
-    assert response.status_code == 422
-    paths = {i["path"] for i in response.json()["detail"]["issues"]}
-    assert {"questions", "default_language"} <= paths

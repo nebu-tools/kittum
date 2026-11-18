@@ -12,6 +12,8 @@ import yaml
 from kittum.core import Id, new_id
 
 if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
+
     from kittum.db import Tx
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "examples" / "protocols"
@@ -47,3 +49,23 @@ def seed_project(tx: Tx) -> tuple[Id, Id, Id]:
         (project["id"], human["id"]),
     )
     return project["id"], human["id"], system["id"]
+
+
+def publish_through_api(
+    client: TestClient,
+    project_id: str,
+    source: str | dict[str, Any],
+    approved_by: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Open the project's draft with `source`, YAML text or JSON data, and publish it, as the
+    workbench does. Returns the published version."""
+    text = source if isinstance(source, str) else json.dumps(source, default=str)
+    draft_url = f"/api/projects/{project_id}/protocol-draft"
+    draft = client.post(draft_url, json={"source": text})
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["source"] == text, "a draft was already open"
+    body = {"revision": draft.json()["revision"], "approved_by": approved_by, "reason": reason}
+    published = client.post(f"{draft_url}/publish", json=body)
+    assert published.status_code == 200, published.text
+    return published.json()

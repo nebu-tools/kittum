@@ -62,6 +62,7 @@ import type {
   Progress,
   ProjectSummary,
   ProtocolDiff,
+  ProtocolDraft,
   ProtocolRevision,
   ProtocolSource,
   ProtocolVersion,
@@ -151,9 +152,33 @@ export interface Workbench {
   readonly previewProtocol: (
     request: Caller & { readonly source: ProtocolSource },
   ) => Call<DiffPreview>;
-  /** Saves `source` as a draft and publishes it with the caller's approval. */
-  readonly publishProtocol: (
-    request: Caller & { readonly source: ProtocolSource; readonly reason: string | null },
+
+  // The project's one open draft: the text every lead edits until one publishes it. Each save
+  // names the revision it was written on; a stale one fails with reason "conflict". A draft is
+  // not a record of the review: the ledger and the sealed bundle hold only what is published.
+
+  /** The open draft, or null when none is open. */
+  readonly openDraft: (projectId: string) => Call<ProtocolDraft | null>;
+  /** Opens the draft with `source`, or the published version without one, or returns the draft
+   * already open, unchanged. */
+  readonly startDraft: (request: {
+    readonly projectId: string;
+    readonly source: string | null;
+    readonly baseRevisionId: string | null;
+  }) => Call<ProtocolDraft>;
+  readonly saveDraft: (request: {
+    readonly projectId: string;
+    readonly revision: number;
+    readonly source: string;
+  }) => Call<ProtocolDraft>;
+  readonly discardDraft: (request: {
+    readonly projectId: string;
+    readonly revision: number;
+  }) => Call<void>;
+  /** Publishes the draft at `revision` with the caller's approval, under the label Kittum
+   * assigns, and closes it. */
+  readonly publishDraft: (
+    request: Caller & { readonly revision: number; readonly reason: string | null },
   ) => Call<StoredProtocol>;
 
   // The protocol assistant, the methods lead's alone. A model drafts a protocol from a

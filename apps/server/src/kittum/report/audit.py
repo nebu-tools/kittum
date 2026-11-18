@@ -239,8 +239,7 @@ class _Names:
         # version (the latest wins), so an event names what a criterion asks, not only its ID.
         self.criteria: dict[str, str] = {}
         for row in tx.execute(
-            "select document from protocol_version where project_id = %s and status = 'published'"
-            " order by published_at, id",
+            "select document from protocol_version where project_id = %s order by published_at, id",
             (project_id,),
         ).fetchall():
             document = row["document"] or {}

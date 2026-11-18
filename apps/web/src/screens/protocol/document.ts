@@ -178,34 +178,6 @@ export const CTGOV = (id: string): Source => ({
   strategy: "",
 });
 
-/** The label after `label`, by its last number: "1.1" to "1.2", "1" to "2", "0.3" to "0.4". */
-export const nextLabel = (label: string) => {
-  const found = /^(.*?)(\d+)(\D*)$/.exec(label.trim());
-  return found ? `${found[1]}${Number(found[2]) + 1}${found[3]}` : `${label.trim()}.1`;
-};
-
-/** Whether `label` comes after `before`, number by number: "1.2" after "1.1", "2" after "1.9".
- * Labels without numbers count as after when they differ. */
-export const comesAfter = (label: string, before: string) => {
-  const numbers = (x: string) => (x.match(/\d+/g) ?? []).map(Number);
-  const a = numbers(label);
-  const b = numbers(before);
-  if (!a.length || !b.length) return label.trim() !== before.trim();
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y;
-  }
-  return false;
-};
-
-/** `doc` as the start of a new draft while version `inForce` is in force. A label that does not
- * come after it becomes the next one, so a new draft never repeats the version in force. */
-export const startDraft = (doc: Doc, inForce: string | null): Doc =>
-  inForce !== null && !comesAfter(doc.version_label, inForce)
-    ? { ...doc, version_label: nextLabel(inForce) }
-    : doc;
-
 /** An ID not yet used in `taken`: `prefix` and the first free number. */
 export const freshId = (prefix: string, taken: ReadonlyArray<string>) => {
   for (let n = 1; ; n++) if (!taken.includes(`${prefix}${n}`)) return `${prefix}${n}`;

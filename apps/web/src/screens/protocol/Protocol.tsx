@@ -1,12 +1,12 @@
 // The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
 // topic its screening mode, audit plan, sources, and criteria. Every heading uses the shared
-// words for core concepts. The methods lead writes versions in the form or as YAML, and publishes
-// them.
+// words for core concepts. The methods lead writes versions in the form or as YAML, into the
+// project's one open draft, and publishes them.
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { Criterion, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
+import type { Criterion, SearchTopic } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
 import { formatDate } from "../../lib/format.ts";
 import { modeLabel, revealLabel } from "../../lib/labels.ts";
@@ -16,7 +16,10 @@ import { useKeys } from "../../ui/keys.ts";
 import { plural, useProject, type Labels } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
 import type { FormState, Handover } from "./Assistant.tsx";
+import type { Doc } from "./document.ts";
 import { forSaving, toDoc } from "./document.ts";
+import type { Draft } from "./draft.ts";
+import { useDraft } from "./draft.ts";
 import { Help } from "../../ui/Help.tsx";
 import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
@@ -48,18 +51,47 @@ type Writing =
   | { readonly mode: "form"; readonly handover: Handover | null }
   | {
       readonly mode: "yaml";
-      readonly base: ProtocolRevision | null;
+      /** The revision the text comes from, if any. */
+      readonly baseId: string | null;
       readonly text: string | null;
       /** Where the form was, to go back to when the YAML stays as it was. */
       readonly back: Handover | null;
     };
 
+/** JSON as the form saves it, as the form's protocol; null for anything else. */
+const formDoc = (text: string): Doc | null => {
+  if (!text.trimStart().startsWith("{")) return null;
+  try {
+    const read = toDoc(JSON.parse(text));
+    return "doc" in read ? read.doc : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Where the open draft opens: in the form when the form wrote it, else as text. */
+const openAt = (opened: Draft["opened"]): Writing => {
+  if (!opened) return { mode: "form", handover: null };
+  const doc = formDoc(opened.source);
+  const baseId = opened.baseRevisionId;
+  return doc
+    ? { mode: "form", handover: { working: { doc, base: null }, selected: baseId, baseId } }
+    : { mode: "yaml", baseId, text: opened.source, back: null };
+};
+
 export function ProtocolScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { protocol, has } = useProject();
+  const { project, protocol, has } = useProject();
+  const draft = useDraft(workbench, project.id);
+  // The draft's epoch the views opened, to open it again when the server's text replaces theirs.
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [writing, setWriting] = useState<Writing>({ mode: "form", handover: null });
+  if (draft.status.state !== "loading" && openedAt !== draft.epoch) {
+    setOpenedAt(draft.epoch);
+    setWriting(openAt(draft.opened));
+  }
   const [switching, setSwitching] = useState<string | null>(null);
   // A switch between the views in progress: both are inert until it ends, so no key is lost.
   const [moving, setMoving] = useState(false);
@@ -91,11 +123,11 @@ export function ProtocolScreen() {
       if (moving || !current?.ready) return;
       setSwitching(null);
       const back: Handover = { working: current.working, selected: current.selected };
-      if (!current.shown) return setWriting({ mode: "yaml", base: null, text: null, back });
+      if (!current.shown) return setWriting({ mode: "yaml", baseId: null, text: null, back });
       setMoving(true);
       try {
         const text = await run(workbench.protocolYaml(forSaving(current.shown.doc)));
-        setWriting({ mode: "yaml", base: current.shown.base, text, back });
+        setWriting({ mode: "yaml", baseId: current.shown.base?.id ?? null, text, back });
       } catch (e) {
         setSwitching(failure(e, "Kittum could not turn the form into YAML."));
       } finally {
@@ -127,8 +159,9 @@ export function ProtocolScreen() {
         setWriting({
           mode: "form",
           handover: {
-            working: { doc: read.doc, base: writing.base },
-            selected: writing.base?.id ?? writing.back?.selected ?? null,
+            working: { doc: read.doc, base: null },
+            selected: writing.baseId ?? writing.back?.selected ?? null,
+            baseId: writing.baseId,
           },
         });
       } catch (e) {
@@ -137,6 +170,19 @@ export function ProtocolScreen() {
         setMoving(false);
       }
     };
+    // Back to the published version, to come back to the protocol as the lead left it.
+    const leave = () => {
+      if (writing.mode === "form" && form.current) {
+        const { working, selected } = form.current;
+        setWriting({ mode: "form", handover: { working, selected } });
+      } else if (writing.mode === "yaml" && yaml.current) {
+        setWriting({ ...writing, text: yaml.current.text });
+      }
+      setEditing(false);
+    };
+    if (draft.status.state === "loading") {
+      return <p className="p-8 text-sm text-ink-2">Loading the draft.</p>;
+    }
     return (
       <div className="flex h-full min-h-0 flex-col">
         {/* One toolbar above the form: how to write, the form's revision bar (the form puts it in
@@ -179,8 +225,9 @@ export function ProtocolScreen() {
               ) : null}
             </div>
             <div ref={setBarSlot} className="flex min-w-0 flex-1 items-center gap-x-3" />
+            <DraftStatus draft={draft} />
             {protocol ? (
-              <Button kind="quiet" size="sm" onClick={() => setEditing(false)}>
+              <Button kind="quiet" size="sm" onClick={leave}>
                 Back to the published version
               </Button>
             ) : null}
@@ -189,17 +236,20 @@ export function ProtocolScreen() {
         <div className="min-h-0 flex-1" inert={moving}>
           {writing.mode === "form" ? (
             <Assistant
+              key={draft.epoch}
               barSlot={barSlot}
               handover={writing.handover}
               paused={moving}
+              draft={draft}
               onCurrent={onCurrent}
               onPublished={published}
             />
           ) : (
             <ProtocolEditor
-              key={writing.base?.id ?? "text"}
+              key={`${draft.epoch}-${writing.baseId ?? "text"}`}
+              draft={draft}
               initialText={writing.text}
-              base={writing.base}
+              baseId={writing.baseId}
               onText={(text, changed) => {
                 yaml.current = { text, changed };
               }}
@@ -232,6 +282,7 @@ export function ProtocolScreen() {
     <Published
       notice={notice}
       lead={lead}
+      drafting={draft.opened !== null}
       onWrite={() => {
         setEditing(true);
         setNotice(null);
@@ -240,13 +291,62 @@ export function ProtocolScreen() {
   );
 }
 
+/** Whether the open draft is saved, and when another lead changed it, the way on. */
+function DraftStatus({ draft }: { draft: Draft }) {
+  const { status } = draft;
+  if (status.state === "conflict") {
+    return (
+      <span role="alert" className="flex items-center gap-2 text-xs" data-testid="draft-conflict">
+        <span className="text-exclude">
+          {status.newer
+            ? "The draft changed elsewhere since you last saved."
+            : "The draft was published or discarded elsewhere."}
+        </span>
+        <Button size="sm" onClick={draft.loadNewer}>
+          {status.newer ? "Load the newer draft" : "Load what is there now"}
+        </Button>
+        <Button size="sm" kind="quiet" onClick={draft.keepMine}>
+          Keep mine as a copy in the editor
+        </Button>
+      </span>
+    );
+  }
+  if (status.state === "none" || status.state === "loading") return null;
+  return (
+    <span className="flex items-center gap-2 text-xs text-ink-2">
+      <span role="status" data-testid="draft-status">
+        {status.state === "saved"
+          ? "Draft saved"
+          : status.state === "saving"
+            ? "Saving the draft"
+            : "Draft not saved"}
+      </span>
+      {status.state === "unsaved" && status.error ? (
+        <>
+          <span className="text-exclude">{status.error}</span>
+          <Button size="sm" onClick={draft.retry}>
+            Retry
+          </Button>
+        </>
+      ) : status.state === "unsaved" ? (
+        <Button size="sm" kind="quiet" onClick={draft.retry}>
+          Save now
+        </Button>
+      ) : null}
+    </span>
+  );
+}
+
 function Published({
   notice,
   lead,
+  drafting,
   onWrite,
 }: {
   notice: string | null;
   lead: boolean;
+  /** A draft is open, so writing goes on with it. */
+  drafting: boolean;
   onWrite: () => void;
 }) {
   const { protocol, labels } = useProject();
@@ -290,7 +390,7 @@ function Published({
               {lead ? (
                 <span className="ml-auto shrink-0">
                   <Button keys={["v"]} onClick={onWrite}>
-                    Write a new version
+                    {drafting ? "Open the draft" : "Write a new version"}
                   </Button>
                 </span>
               ) : null}
