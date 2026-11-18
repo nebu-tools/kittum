@@ -15,8 +15,6 @@ Parsers: `PyMuPDFParser` is the base layer. `PdfiumParser` reads the same PDF wi
 differential checks (`compare_layers`). `DoclingParser` (the `docling` extra) adds layout and
 TableFormer grids over PyMuPDF's characters. `OcrMyPdfParser` OCRs pages triage marks as scans or
 broken encodings, when `ocrmypdf` and `tesseract` are installed.
-
-Owner: WP-10.
 """
 
 from kittum.documents.acquisition import (

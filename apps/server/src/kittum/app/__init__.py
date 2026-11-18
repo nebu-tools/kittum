@@ -1,4 +1,4 @@
-"""The composition root and the project lifecycle (WP-15).
+"""The composition root and the project lifecycle.
 
 `AppContext.from_settings` wires every module for one process; `kittum serve`, `kittum worker`,
 and the CLI's project commands share it. `lifecycle` holds the steps of a project, from creating
@@ -6,7 +6,7 @@ it and its people to opening a screening stage, as functions the routes and comm
 `demo.seed` builds a complete demo project from recordings. `enrichment` and `open_access` run the
 corpus's enrichment and the open-access end of the full-text waterfall as jobs.
 
-Owner: WP-15. An entry point like `api` and `cli`: it may use every module's public surface.
+An entry point like `api` and `cli`: it may use every module's public surface.
 """
 
 from kittum.app.assist import (

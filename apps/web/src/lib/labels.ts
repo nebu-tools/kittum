@@ -17,7 +17,7 @@ export const MODE_LABELS: Record<string, { readonly short: string; readonly long
   },
   S: {
     short: "Pool of screeners, second opinions",
-    long: "One person of a pool screens each record and asks a colleague when unsure.",
+    long: "One person of a pool screens each record and asks another reviewer when unsure.",
   },
 };
 

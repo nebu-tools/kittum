@@ -1,4 +1,4 @@
-"""Group rewrites of an identity revision's links (WP-07).
+"""Group rewrites of an identity revision's links.
 
 A link puts one occurrence in a report and the report in a study. Every occurrence of a report
 belongs to the report's study, so the rewrites move whole groups: a report merge unions complete

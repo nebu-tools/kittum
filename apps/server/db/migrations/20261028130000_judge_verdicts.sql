@@ -1,6 +1,6 @@
 -- migrate:up
 
--- The AI judge: its configurations and the verdicts it recorded (WP-08). A verdict is never
+-- The AI judge: its configurations and the verdicts it recorded. A verdict is never
 -- changed; a new model, prompt, or protocol gives a new cache key and a new row.
 
 create table judge_config (

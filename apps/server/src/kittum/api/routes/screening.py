@@ -1,7 +1,7 @@
 """Screening routes: the reviewer's queue, decide, undo, wrong document, adjudication, and
 status.
 
-Until the API has authentication (WP-15), the caller names themselves in the `X-Kittum-Reviewer`
+Until the API has authentication, the caller names themselves in the `X-Kittum-Reviewer`
 header with their actor ID. The service enforces blinding against that ID: a reviewer gets only
 their own assignments, no AI output before their own provisional decision, no sentinel or audit
 flags, and only their own counts. The header is a stand-in, not a security boundary; anyone who

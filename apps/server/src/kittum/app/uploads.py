@@ -1,4 +1,4 @@
-"""Many full texts at once: the lead uploads the PDFs a customer sent, and Kittum matches each one.
+"""Many full texts at once: the lead uploads the PDFs a library sent, and Kittum matches each one.
 
     result = upload_full_text(tx, project_id, "10.2196_66709.pdf", pdf, actor_id=lead, ...)
     # attached to its report, or held for the lead with the reports it could be

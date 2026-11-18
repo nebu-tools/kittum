@@ -31,8 +31,6 @@ render in `report_artifact` with a `report.rendered` event, so a download can be
 what was rendered for the project. `seal_bundle` renders every target into `reports/` and seals
 the bundle with every registered exporter: this package registers the review's tables (protocol,
 search, corpus, judge, screening, report) at import.
-
-Owner: WP-14.
 """
 
 from typing import TYPE_CHECKING, Literal, get_args

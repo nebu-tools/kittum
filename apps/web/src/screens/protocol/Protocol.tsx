@@ -24,7 +24,7 @@ export const MODES: Record<SearchTopic["mode"], string> = {
   M1: "Two people screen every record. The AI screens it too, as a third screener.",
   M2: "One person screens every record and the AI is the second screener. Every disagreement gets a blind extra screen.",
   M3: "Two people screen in the AI's order and stop when a statistical test set in advance passes.",
-  S: "One person of a pool screens each record and asks a colleague for a second opinion when unsure. The colleague sees the first decision.",
+  S: "One person of a pool screens each record and asks another reviewer for a second opinion when unsure. That reviewer sees the first decision.",
 };
 
 /** What a topic's documentation level allows, in a line. */

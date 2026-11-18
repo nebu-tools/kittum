@@ -792,7 +792,7 @@ function StageTable({
   // Filters beyond the main chips (your decision; the lead's outcome and screener).
   const [moreFilters, setMoreFilters] = useState(false);
   const [reload, setReload] = useState(0);
-  // Mode S, key f: the next decision on this row asks a colleague, with this comment.
+  // Mode S, key f: the next decision on this row asks another reviewer, with this comment.
   const [asking, setAsking] = useState<{
     ref: string;
     comment: string;
@@ -1157,7 +1157,7 @@ function StageTable({
   const decide = async (target: TableRow, outcome: Outcome, reason: string | null = null) => {
     if (!canDecide || busy || !target.assignment_id || !target.etag) return;
     const current = own(target);
-    // Mode S: a decision after f asks a colleague, with what the reviewer is unsure about.
+    // Mode S: a decision after f asks another reviewer, with what the reviewer is unsure about.
     const ask = asking?.ref === target.ref && !asking.typing ? asking : null;
     if (ask) setAsking(null);
     const decision: Decision = {

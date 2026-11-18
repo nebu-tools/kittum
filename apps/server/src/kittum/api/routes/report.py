@@ -8,7 +8,7 @@ key (`KITTUM_CHECKPOINT_KEY`) and writes the bundle under `bundles/` beside the 
 Reports show every reviewer's decisions and the AI's output, so rendering, downloading, and
 sealing are for the methods lead only (`report.require_lead`): never a screener, auditor, or
 adjudicator of a stage. The working export is the exception: it follows the screening table's
-blinding, so a screener or auditor exports only their own rows. Until the API has authentication (WP-15), the caller names the actor in
+blinding, so a screener or auditor exports only their own rows. Until the API has authentication, the caller names the actor in
 the body or in the `X-Kittum-Reviewer` header; that is a stand-in, not a security boundary.
 """
 

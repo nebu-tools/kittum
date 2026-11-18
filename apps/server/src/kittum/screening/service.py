@@ -1316,7 +1316,7 @@ class Screening:
                     )
                 reveal = (
                     None
-                    # Asking a colleague settles at once: their decision settles the record.
+                    # Asking another reviewer settles at once: their decision settles the record.
                     if a["revealed"] or reading is None or decision.second_opinion
                     else reveal_for(row["reveal"], decision, reading)
                 )
@@ -2097,7 +2097,7 @@ class Screening:
             second = st["second"]
             if second is not None and (second["answered"] or second["state"] != "pending"):
                 raise InvalidDecision(
-                    "A colleague has answered your request for a second opinion. Their decision"
+                    "Another reviewer has answered your request for a second opinion. Their decision"
                     " settles this record."
                 )
             undone = [

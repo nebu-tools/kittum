@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 KEY = SigningKey.generate()
 TRIAL_PDF = b"%PDF-1.7\n% KEYNOTE-189 primary publication\n"
-CSR_PDF = b"%PDF-1.7\n% clinical study report, confidential\n"
+WITHHELD_PDF = b"%PDF-1.7\n% a full text under licence, not for redistribution\n"
 REPORT = b"# Screening\n\n1 record included.\n"
 
 
@@ -34,7 +34,7 @@ class ScreeningExporter:
     """Stands in for a module that adds its own rows and artifacts to every bundle."""
 
     pdf: str
-    csr: str
+    licensed: str
     name: str = "screening"
     seen: list[tuple[Id, int]] = field(default_factory=list)
 
@@ -55,7 +55,9 @@ class ScreeningExporter:
         )
         bundle.artifact(self.pdf, media_type="application/pdf")
         bundle.artifact(
-            self.csr, media_type="application/pdf", withheld_reason="CSR under confidentiality"
+            self.licensed,
+            media_type="application/pdf",
+            withheld_reason="licence forbids redistribution",
         )
         bundle.file("reports/screening.md", REPORT)
         for bad in ("../outside.md", "/abs.md", "reports//x.md", "artifacts/x", "manifest.json"):
@@ -67,7 +69,7 @@ def _seal(store: Harness, tmp_path: Path) -> tuple[Path, Id, ScreeningExporter]:
     project, actor = store.new_project()
     store.append(project, actor, 4)
     artifacts = FilesystemStore(tmp_path / "store")
-    exporter = ScreeningExporter(pdf=artifacts.put(TRIAL_PDF), csr=artifacts.put(CSR_PDF))
+    exporter = ScreeningExporter(pdf=artifacts.put(TRIAL_PDF), licensed=artifacts.put(WITHHELD_PDF))
     store.append(project, actor, 1, kind="test.after_cutoff")
 
     out = tmp_path / "bundle"
@@ -114,7 +116,7 @@ def test_sealed_bundle_verifies_offline(
         ("PMID:29658856", '{"page":3,"quote":"overall survival"}')
     ]
     assert sorted(db.execute("select hash, included, withheld_reason from artifact")) == sorted(
-        [(exporter.pdf, 1, None), (exporter.csr, 0, "CSR under confidentiality")]
+        [(exporter.pdf, 1, None), (exporter.licensed, 0, "licence forbids redistribution")]
     )
     db.close()
     assert sorted(p.name for p in (out / "artifacts").iterdir()) == [exporter.pdf]

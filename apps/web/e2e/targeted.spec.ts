@@ -150,7 +150,7 @@ test("a targeted search: a pool screens, and a second opinion settles an unsure 
     await page.goto(`/p/${pid}/screening/title-abstract?as=${jun}`);
     await expect(page.getByTestId("record-title")).toHaveText(unsure, { timeout: 30_000 });
     const asked = page.getByTestId("second-opinion");
-    await expect(asked).toContainText("A colleague asks for your second opinion");
+    await expect(asked).toContainText("Another reviewer asks for your second opinion");
     await expect(asked).toContainText("Included");
     await expect(page.getByTestId("second-opinion-comment")).toHaveText(
       "“Are these patients smokers?”",

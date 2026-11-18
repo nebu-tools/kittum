@@ -16,7 +16,7 @@ reason. Every answer and override is a ledger event.
         appraisal = appraisal.answer(tx, ledger, appraisal_id=..., question_id="1.1",
                                      answer="probably_yes", anchor_ids=(anchor.id,), ...)
 
-No model answers or assembles anything yet. Owner: WP-12.
+No model answers or assembles anything yet.
 """
 
 from typing import Literal, get_args

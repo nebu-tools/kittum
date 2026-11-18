@@ -2,8 +2,6 @@
 
 The study is the unit of inclusion. Kittum proposes which records belong to which report and
 study; a human confirms the links. PRISMA counts come from a frozen identity revision.
-
-Owner: WP-07.
 """
 
 from collections import defaultdict

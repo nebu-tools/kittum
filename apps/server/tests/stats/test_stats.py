@@ -1,4 +1,4 @@
-"""Worked examples and seeded simulations for `kittum.stats` (WP-13).
+"""Worked examples and seeded simulations for `kittum.stats`.
 
 The reference numbers for the stopping test come from the buscarpy implementation of Callaghan
 and Müller-Hansen (2020), ``generate_dataset(random_seed=12345)`` followed by ``calculate_h0``

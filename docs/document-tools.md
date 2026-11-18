@@ -60,7 +60,7 @@ text and tables are proposals until Kittum matches them to PyMuPDF or OCR word b
 
 ## OCR and document vision models
 
-Most journal PDFs have a text layer. Old comparator trials and some CSR appendices do not. Kittum
+Most journal PDFs have a text layer. Old comparator trials and some study report appendices do not. Kittum
 prefers OCR that writes a text layer back into the PDF, so a scan goes through the same anchoring
 path as a born-digital file:
 
@@ -96,7 +96,7 @@ a proposal that Kittum re-anchors. The leaderboards disagree, which says more th
 | Datalab: Chandra OCR 2, Indra OCR, Lift | 0.5B to 5B | | Chandra 70.1 | Blocks | Modified OpenRAIL-M: free only below USD 2M to 20M funding or revenue, and no use that competes with Datalab's API | **Exclude.** Indra (OCR) and Lift (extraction) look strong, but the cap and the no-competition clause are further restrictions under the AGPL. |
 | olmOCR 2 | 7B | | | None | Apache / Apache | Not suitable: no boxes |
 | Nanonets-OCR2 | 3B | | | None | No licence declared | Exclude |
-| Mistral OCR 4 | API | | | Boxes (press reports) | Proprietary, EU-hosted | Opt-in for public papers only, never for CSRs |
+| Mistral OCR 4 | API | | | Boxes (press reports) | Proprietary, EU-hosted | Opt-in for public papers only, never for confidential documents |
 
 ## Extraction libraries
 
@@ -169,7 +169,7 @@ lists no current open model. Neither helps.
 | --- | --- | --- | --- | --- |
 | Judge, family 1, and main extractor | **Qwen3.8-27B** | Best small model on the independent boards; 262k context; reads page images | Apache-2.0 | One 80 GB GPU in BF16; about 18 GB at Q4 on a laptop |
 | Judge, family 2 | **Gemma-4-31B-it** | Top of BRIDGE, best faithfulness score here, a separate lineage from Qwen. Already validated for Cochrane screening: paired with gpt-oss-120b it reached 95.9% sensitivity over 419 reviews (medRxiv, June 2026). | Apache-2.0 since Gemma 4 | One 80 GB GPU |
-| Long documents and second extractor | **Nemotron 3.5 Super VL** (120B, 12B active) | Best open model in the 40 to 150B class on Artificial Analysis; 1M context; reads page images. Covers CSRs beyond 256k tokens. | OpenMDW-1.1, permissive | NVFP4 on two H100s or one H200 |
+| Long documents and second extractor | **Nemotron 3.5 Super VL** (120B, 12B active) | Best open model in the 40 to 150B class on Artificial Analysis; 1M context; reads page images. Covers documents beyond 256k tokens. | OpenMDW-1.1, permissive | NVFP4 on two H100s or one H200 |
 | Laptop | Qwen3.8-27B at Q4, or Gemma 4 12B | | Apache-2.0 | 24 GB GPU or 32 GB unified memory |
 | Development | Gemma 4 E4B (`google/gemma-4-E4B-it`, Ollama `gemma4:e4b`) and Qwen3.5-4B (`Qwen/Qwen3.5-4B`, Ollama `qwen3.5:4b`) | Small enough for any laptop; for building and debugging, never for real decisions | Apache-2.0 | 16 GB of memory |
 | Embeddings for queue order and clustering | MedCPT (PubMed-trained, English) for abstracts. For non-English and mixed text, a bake-off of mDenseOn (LightOn, 307M, multilingual, open training data), EmbeddingGemma 2 (740M, 100+ languages, 8k context, Matryoshka sizes down to 128), and Qwen3-Embedding. | Never used for primary search | Public domain; Apache-2.0 for all three | CPU or a small GPU |
@@ -178,21 +178,21 @@ lists no current open model. Neither helps.
 Nemotron 3.5 Super VL is not the second judge, for two reasons. Qwen3.8-27B beats it on every
 independent score above. And NVIDIA post-trained its base model on outputs from Qwen3, gpt-oss,
 and DeepSeek, so its errors may overlap with the Qwen judge's, which defeats the point of a second
-family. The spike runs it against Gemma 4 anyway, and the double-fault rate settles it.
+family. The model benchmark runs it against Gemma 4 anyway, and the double-fault rate settles it.
 
 gpt-oss-120b is retired. It trails on every board above, has 131k context, and cannot read page
 images. It stays as a regression baseline only, because the published screening evidence used it.
 
 Qwen3.8-27B recommends thinking mode at temperature 1.0. Kittum wants temperature 0 and a
-schema-constrained answer. The spike compares thinking at medium effort, with the reasoning parsed
+schema-constrained answer. The model benchmark compares thinking at medium effort, with the reasoning parsed
 before the constrained JSON, against thinking off, which costs about two BRIDGE points.
 
 ### Small domain models
 
 | Model | What it does | Licence | Verdict |
 | --- | --- | --- | --- |
-| OpenMed zero-shot NER (91 GLiNER models, 166M to 459M, for drugs, diseases, oncology, genes, and more) | Tags entities in any text, including labels it was not trained on | Apache-2.0 | **Use** for pre-decision highlights. Unlike PubTator, it runs locally, so it works on CSRs. |
-| OpenMed privacy-filter-nemotron-v2 (on `openai/privacy-filter`) | Detects personal identifiers | Apache-2.0 | Optional check at CSR intake. The card warns that clinical PHI needs its own validation. |
+| OpenMed zero-shot NER (91 GLiNER models, 166M to 459M, for drugs, diseases, oncology, genes, and more) | Tags entities in any text, including labels it was not trained on | Apache-2.0 | **Use** for pre-decision highlights. Unlike PubTator, it runs locally, so it works on confidential documents. |
+| OpenMed privacy-filter-nemotron-v2 (on `openai/privacy-filter`) | Detects personal identifiers | Apache-2.0 | Optional check when a confidential document comes in. The card warns that clinical PHI needs its own validation. |
 | lion-ai MedDecider-4B (on Qwen3.5-4B) | Answers a yes/no or multiple-choice question about a clinical text with a calibrated probability per option. TrialGPT criteria 85.4% (partly in its training distribution), NLI4CT macro-F1 0.776. Follows a planted instruction only 5.4% of the time. | Apache-2.0 | Experiment as a calibrated check per criterion. It returns no quote, so it cannot exclude anything, and as a Qwen model it adds no family diversity. Released October 2026. |
 | lion-ai MedDecider-9B, 27B, 31B | The same, larger | CC BY-NC 4.0 | **Exclude** |
 | lion-ai medextractor-liquid | Medical span extraction on an LFM encoder | LFM Open License plus non-commercial training data | **Exclude** |
@@ -264,9 +264,9 @@ recently as October 2026 (#59940, #58899). Kittum therefore:
 
 ### Hosted models and confidentiality
 
-Kittum does not gate hosted models: the operator chooses what goes where. For client CSRs, a hosted
-model should have EU processing, a data processing agreement, zero retention, no training on
-inputs, and the client's written sign-off. Kittum records the recipe, its serving, the endpoint,
+Kittum does not gate hosted models: the operator chooses what goes where. For confidential documents,
+a hosted model should have EU processing, a data processing agreement, zero retention, no training
+on inputs, and the document owner's written sign-off. Kittum records the recipe, its serving, the endpoint,
 and the model identity the provider returns, not only the alias in the request.
 
 ## Sources

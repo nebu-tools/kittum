@@ -23,8 +23,6 @@ handover bundle through a registered exporter.
     with db.transaction() as tx:
         run = request_run(tx, commands, RunRequest(...), clock=clock)
     worker = Worker(db, queue, {JOB_KIND: run_handler(...)}, name="w1")
-
-Owner: WP-11.
 """
 
 from kittum.extraction.bundle import ExtractionExporter

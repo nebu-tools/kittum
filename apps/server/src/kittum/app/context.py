@@ -401,7 +401,7 @@ JOB_HANDLERS: dict[str, HandlerFactory] = {}
 
 
 def register_job_handler(kind: str, factory: HandlerFactory) -> None:
-    """Add a job kind to `kittum worker`. Extraction (WP-11) registers its jobs here."""
+    """Add a job kind to `kittum worker`. Extraction registers its jobs here."""
     if kind in JOB_HANDLERS and JOB_HANDLERS[kind] is not factory:
         raise ValueError(f"a different handler for {kind!r} is already registered")
     JOB_HANDLERS[kind] = factory

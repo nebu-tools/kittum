@@ -133,7 +133,7 @@ export const PRESETS = {
     label: "Targeted search",
     sets: "a pool of screeners with second opinions, no sentinels or audit sample, and working documentation",
     description:
-      "Mode S with working documentation: one person of a pool screens each record and asks a colleague for a second opinion when unsure. No auditor, no sentinels. The AI's reading may show before the decision.",
+      "Mode S with working documentation: one person of a pool screens each record and asks another reviewer for a second opinion when unsure. No auditor, no sentinels. The AI's reading may show before the decision.",
   },
 } as const;
 export type Preset = keyof typeof PRESETS;

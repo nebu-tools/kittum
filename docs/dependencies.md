@@ -23,9 +23,9 @@ What that changes:
 - The Janus reader swap is no longer needed. Janus keeps PyMuPDF, and Kittum uses Janus as it is.
 - Anyone who uses Kittum over a network can get its source (AGPL section 13). The workbench footer
   links to the source of the running version.
-- Clients who receive a handover bundle get the `verify` tool under the AGPL, with its source.
-- Selling a proprietary licence later would need copyright in every contribution. Kittum has one
-  author now. If outside contributions start, decide on a contributor agreement first.
+- Anyone who receives a handover bundle gets the `verify` tool under the AGPL, with its source.
+- Kittum has one author. If outside contributions start, decide on a contributor agreement before
+  merging them, so the licence can still be changed.
 
 What stays blocked, in code and in model weights:
 
@@ -119,11 +119,11 @@ moving it over is a separate change.
 
 The PDF viewer decides how fast a reviewer can check an anchor, so it got a closer look:
 
-| Viewer | Licence | Releases | Fit for a 300-page CSR with anchored highlights | Verdict |
+| Viewer | Licence | Releases | Fit for a 300-page study report with anchored highlights | Verdict |
 | --- | --- | --- | --- | --- |
 | Own viewer, as in Janus | AGPL (Kittum) | | The server renders page images with PyMuPDF. The client virtualizes pages with Legend List and lays an invisible text layer from the reader's word boxes over each image, plus the highlight overlay. The browser never interprets the PDF, so what the reviewer selects is what the parser saw. | **Use** |
 | pdfjs-dist 6.4 (Mozilla) | Apache-2.0 | 12 | Renders visible pages only. Kittum would still draw its own overlay. | Fallback if server rendering is too slow |
-| EmbedPDF | MIT packages; its CloudPDF server is source-available | 55 | PDFium compiled to WASM in a worker, with tiling and virtual scrolling. The same engine as pypdfium2. | Spike against a real CSR |
+| EmbedPDF | MIT packages; its CloudPDF server is source-available | 55 | PDFium compiled to WASM in a worker, with tiling and virtual scrolling. The same engine as pypdfium2. | Spike against a real 300-page report |
 | react-pdf (wojtekmaj) | MIT | 5 | One component per page; needs added virtualization | Optional |
 | react-pdf-highlighter | MIT | 0 | No release since 2024 | Avoid |
 | Nutrient (PSPDFKit), Apryse, Foxit | Proprietary | | | Blocked |
@@ -156,7 +156,7 @@ The full comparison is on [Document and model tools](document-tools.md).
 | Agent extraction | PydanticAI with Kittum's quote verifier | LangExtract's offsets are not reliable enough for provenance |
 | Judges | Qwen3.8-27B and Gemma-4-31B | Two separate lineages, the top two deployable models on the BRIDGE clinical board, one GPU each |
 | Main extractor | Qwen3.8-27B | Best independent long-context score among models that fit (AA-LCR 0.82); 262k context |
-| Long documents | Nemotron 3.5 Super VL | 1M context and page images for CSRs beyond 256k tokens |
+| Long documents | Nemotron 3.5 Super VL | 1M context and page images for documents beyond 256k tokens |
 | Serving | vLLM with xgrammar; Ollama on laptops | Most active serving stack; a batch-invariant mode to test |
 
 ## Open checks
@@ -165,7 +165,7 @@ The full comparison is on [Document and model tools](document-tools.md).
 - Benchmark Qwen3.8-27B, Gemma 4, and Nemotron 3.5 Super VL on the gold data; gpt-oss-120b stays as a baseline.
 - Test vLLM batch-invariant mode on each picked model.
 - Run the Object Lock conformance test on the chosen store.
-- Spike pdf.js and EmbedPDF on a 300-page CSR.
+- Spike pdf.js and EmbedPDF on a 300-page study report.
 - Confirm the PubTator 3 terms and rate limit, which only third parties report.
 
 ## Sources

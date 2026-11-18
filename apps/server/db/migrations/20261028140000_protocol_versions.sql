@@ -1,6 +1,6 @@
 -- migrate:up
 
--- Protocol versions (WP-03). A version is saved as a draft and frozen when published. The
+-- Protocol versions. A version is saved as a draft and frozen when published. The
 -- document and its hash never change; publishing only fills in the approval.
 
 create table protocol_version (

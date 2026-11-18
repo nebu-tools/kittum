@@ -232,7 +232,7 @@ export function useQueue(
     async (
       outcome: Outcome,
       reasonCriterionId: string | null = null,
-      /** Mode S: ask a colleague of the pool, with what the reviewer is unsure about. */
+      /** Mode S: ask another reviewer of the pool, with what the reviewer is unsure about. */
       secondOpinion: { readonly comment: string } | null = null,
     ) => {
       if (!current || busy) return;

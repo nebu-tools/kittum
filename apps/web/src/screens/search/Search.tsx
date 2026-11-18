@@ -148,7 +148,7 @@ export function SearchScreen() {
       : totals === null
         ? null
         : totals.size === 0
-          ? "Add the customer's known papers to check what the search finds."
+          ? "Add the papers the team already knows to check what the search finds."
           : totals.missed === 0
             ? "The search found every known paper."
             : built

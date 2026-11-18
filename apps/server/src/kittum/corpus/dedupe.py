@@ -1,4 +1,4 @@
-"""Deduplication and proposal generation rules for corpus (WP-07).
+"""Deduplication and proposal generation rules for corpus.
 
 Rules:
 1. Record deduplication (same_record and same_report) uses report identifiers (DOI, PMID, PMCID)

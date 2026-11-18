@@ -1,4 +1,4 @@
-"""Complete the pool over HTTP: the lead uploads the papers the customer already has (here an
+"""Complete the pool over HTTP: the lead uploads the papers the review team already knows (here an
 Excel list) as a topic's known pool, sees what the search found of it, what it missed, and
 what is new, and the screening table marks the pool's records so a reviewer can filter them.
 A complete-documentation topic screens blind to the pool; the lead still sees it."""
@@ -90,7 +90,7 @@ class Project:
         if mode == "S":
             source["search_topics"][0].update(
                 mode="S",
-                mode_rationale={"en": "Complete the customer's pool."},
+                mode_rationale={"en": "Complete the known pool."},
                 audit={"sentinel_percent": "0", "random_audit_percent": "0"},
             )
         draft = self.ok(
@@ -151,7 +151,7 @@ def _upload(project: Project, data: bytes) -> Any:
     )
 
 
-def test_a_targeted_topic_completes_the_customers_pool(database: Database, tmp_path: Path) -> None:
+def test_a_targeted_topic_completes_the_known_pool(database: Database, tmp_path: Path) -> None:
     project = Project(database, tmp_path, "S")
     pid, lead, ok = project.pid, project.lead, project.ok
     data = _known_papers()

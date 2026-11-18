@@ -15,8 +15,6 @@ fragment the AI judge answers with a verbatim quote (`render_prompt` for `judge.
 The core schema is domain-neutral. A protocol may name a `profile` that adds vocabularies,
 labels, typed `extensions`, and validation rules (`register_profile`); this package never imports
 one.
-
-Owner: WP-03.
 """
 
 from kittum.protocol.compiler import (

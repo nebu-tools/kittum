@@ -1,4 +1,4 @@
-"""Tests for WP-07 (corpus): deduplication, link proposals, identity revisions, and PRISMA counts."""
+"""Tests for the corpus: deduplication, link proposals, identity revisions, and PRISMA counts."""
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -103,7 +103,7 @@ def create_test_project_and_actor(tx: Tx) -> tuple[Id, Id]:
     with tx.cursor() as cur:
         cur.execute(
             "insert into project (id, name, policy_version) values (%s, %s, %s)",
-            (proj_id, "Test Project WP-07", "1.0"),
+            (proj_id, "Test Project", "1.0"),
         )
         cur.execute(
             "insert into actor (id, identity_ref, kind) values (%s, %s, %s)",

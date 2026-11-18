@@ -1,8 +1,8 @@
 # Sources
 
 This page lists the search and enrichment sources Kittum uses, their limits, and their terms for
-commercial use. "Checked" means a council member read the provider's current page in October 2026.
-"Unverified" means nobody confirmed the value. Confirm unverified values before the spike, and
+commercial use. "Checked" means someone read the provider's current page in October 2026.
+"Unverified" means nobody confirmed the value. Confirm unverified values before relying on them, and
 store the terms URL and the date read with each acquisition.
 
 Free access, commercial use, metadata rights, and PDF redistribution are four separate questions.
@@ -13,7 +13,7 @@ A source can answer yes to one and no to another.
 | Role | Counts toward PRISMA identification | Load spreading allowed |
 | --- | --- | --- |
 | Primary search | Yes, one `SearchExecution` per database per topic | No. A strategy runs on its own database only. |
-| Other methods (citation chasing, agency website lookups, the sponsor's study list) | Yes, in the "other methods" column | No |
+| Other methods (citation chasing, agency website lookups, a manufacturer's list of studies) | Yes, in the "other methods" column | No |
 | Enrichment (abstracts, DOIs, OA locations, retractions, entities) | No | Yes |
 | Full-text acquisition | No | Yes, as a waterfall |
 
@@ -28,7 +28,7 @@ sources in its `SourcePlan`. A common baseline for reviews of drug interventions
   Data, a lookup of studies already identified is usually enough.
 
 Some method guidance excludes routine searches of preprint servers, and a profile can enforce that.
-Preprints found another way (citation chasing, Europe PMC, the sponsor's study list) still go
+Preprints found another way (citation chasing, Europe PMC, a manufacturer's list of studies) still go
 through normal screening and quality assessment.
 
 A profile can add sources, such as a lookup on an agency's own website. Each profile's doc lists
@@ -48,7 +48,7 @@ its minimum.
 | PubTator 3 | Entity tags for highlighting and dedupe signals | 3 requests per second. Unverified. | None | NCBI public service | Annotations never decide eligibility. |
 | Semantic Scholar | Full-text lookup (`openAccessPdf`), opt-in | 1 request per second with a key. Checked. | Free key (`KITTUM_SEMANTIC_SCHOLAR_API_KEY`, sent as `x-api-key`). Kittum asks Semantic Scholar only when the key is set; without it the waterfall skips the source and the retrieval run says so. | Restricted. The default API licence requires extra permission for commercial use. Checked. | Opt-in because of that licence: a deployment that sets the key confirms it may use the API. Asked by DOI, else PMID, after the preprint servers. Its `openAccessPdf` is often a landing page, and for 10.2196/66709 the same supplement Unpaywall names. |
 | CORE | Full-text lookup (repository copies) | Registered personal key: 1,000 tokens a day, 25 a minute. Academic key: 5,000 a day, 10 a minute. A simple query costs 1 token. Kittum uses 10 a minute and 900 a day. Checked. | Key required (`KITTUM_CORE_API_KEY`, sent as a bearer token). Full texts are not available without one. | Treat as restricted until checked. A council member reported that consultancy use needs a paid licence. | Asked last, by DOI, only with a key. Without one the waterfall skips it and the retrieval run says so. CORE states no licence for the copies it aggregates. Not recorded in Kittum's fixtures, because no key may reach a recording. |
-| Lens.org | Not used in the commercial profile | Trial plans are small | Token | A council member reported that the terms class consultancy reports as commercial use. | Optional, off by default |
+| Lens.org | Not used by default | Trial plans are small | Token | Reported, not rechecked: the terms class paid reviews done for someone else as commercial use. | Optional, off by default |
 | medRxiv and bioRxiv | Supplementary search; full-text lookup | No published limit. Kittum uses 1 request per second. | None | Per-article licence in the `details` answer (`cc_by`, `cc_by_nc_nd`, `cc0`, `cc_no` for no reuse licence) | No Boolean search. Search through Europe PMC (`SRC:PPR`) instead. Full text: `api.biorxiv.org/details/<server>/<doi>` for a DOI 10.1101/..., medRxiv first, then bioRxiv; the newest version's PDF is fetched. The servers sit behind Cloudflare, which often refuses automated PDF downloads with 403. |
 | arXiv | Full-text lookup | One request every three seconds, on one connection. Checked. | None | Per-paper licence in the OAI-PMH `arXiv` record | Asked for a DOI 10.48550/arXiv.<id>. The licence comes from `oaipmh.arxiv.org`, the PDF from `export.arxiv.org`, the host arXiv asks automated clients to use. |
 
@@ -152,7 +152,7 @@ Every retry and every attempt is a ledger event.
 
 Retrieval exports the reports sought for retrieval without a usable full text as CSV or RIS: DOI,
 PMID, title, authors, journal, year, the sources tried, why each attempt failed, and a file name to
-give the PDF. Whoever gets the PDFs (a customer, a library) sends them back, and the lead uploads
+give the PDF. Whoever gets the PDFs (a library, a study author) sends them back, and the lead uploads
 them at once. Kittum matches each PDF by the DOI or PMID in its file name, or by the same check as
 above, and holds the rest for the lead to assign or discard.
 

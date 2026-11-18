@@ -64,8 +64,6 @@ information names an `unclear` criterion. Readings of the other criteria are opt
 who finds that the full text shown is not the record's report withdraws the item
 (`withdraw_item`): it leaves every queue, count, and outcome without a decision, which is not an
 exclusion.
-
-Owner: WP-09.
 """
 
 from kittum.screening.jobs import JudgeRunner, bench_handler, judge_handler

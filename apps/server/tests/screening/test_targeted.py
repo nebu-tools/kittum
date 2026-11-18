@@ -278,7 +278,7 @@ def test_asking_a_second_opinion_settles_at_once_even_where_the_ai_would_be_reve
 
     unsure = queue(world, a)[0]
     result = decide(world, a, unsure, UNSURE)
-    # No reveal to keep or revise: the colleague's decision settles the record, so the ask
+    # No reveal to keep or revise: the other reviewer's decision settles the record, so the ask
     # cannot wait on a final decision that might drop it.
     assert result.phase == "final" and result.reveal is None
     consult = queue(world, b)[0]

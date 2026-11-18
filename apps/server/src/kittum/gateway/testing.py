@@ -49,7 +49,7 @@ class FakeTransport:
 
 
 class PassThroughGateway:
-    """A gateway with no limits, cache, or retries. Lets modules run before WP-04 lands."""
+    """A gateway with no limits, cache, or retries. Lets modules run without the real one."""
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport

@@ -55,7 +55,7 @@ export function TitleAbstractQueue() {
   // record it was opened on, so a decision brings the next record up on its abstract.
   const [promptFor, setPromptFor] = useState<string | null>(null);
   const working = stage?.documentation === "working";
-  // Mode S, key f: the next decision asks a colleague, with this comment.
+  // Mode S, key f: the next decision asks another reviewer, with this comment.
   const [asking, setAsking] = useState<{ comment: string; typing: boolean } | null>(null);
   const ask = asking && !asking.typing ? { comment: asking.comment } : null;
   const [status, setStatus] = useState<ScopeStatus | null>(null);

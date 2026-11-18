@@ -2,8 +2,6 @@
 
 A `SearchExecution` records everything PRISMA-S asks for: the strategy as run, the platform's
 query translation, limits, dates, counts, and the raw responses by hash.
-
-Owner: WP-05.
 """
 
 from kittum.search.count import (

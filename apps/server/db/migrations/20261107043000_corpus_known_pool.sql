@@ -1,8 +1,8 @@
 -- migrate:up
 
--- A known pool: the papers a search topic is expected to find, such as the ones a customer
--- already has, imported from their files. It is compared with the topic's searches and never
--- counts as a search result. Each file is one import; a withdrawn file stops counting but stays.
+-- A known pool: the papers a search topic is expected to find, such as the ones the review
+-- team already knows, imported from their files. It is compared with the topic's searches
+-- and never counts as a search result. Each file is one import; a withdrawn file stops counting but stays.
 create table known_pool_file (
     id uuid primary key,
     project_id uuid not null references project (id),
