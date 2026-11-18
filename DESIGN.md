@@ -8,7 +8,6 @@ The supporting reference pages are:
 - [Document and model tools](docs/document-tools.md) for parsers, OCR, and models.
 - [Standards and regulation](docs/standards.md) for the mapping to PRISMA, RAISE, the EU AI Act,
   GDPR, and quality frameworks.
-- [Profiles](#profiles) for the optional rules of one review community.
 
 Kittum's core does not depend on any jurisdiction. It rests on these principles:
 
@@ -21,8 +20,6 @@ Kittum's core does not depend on any jurisdiction. It rests on these principles:
 - The reviewer workbench is blinded and keyboard-first.
 - Reproducibility promises are named in tiers.
 - Models run locally by default, and licence rules apply to code and weights.
-
-What one review community requires on top of that can live in a profile.
 
 ## The problem in one page
 
@@ -38,7 +35,7 @@ The review follows a fixed shape:
    for each scope. A scope is a subpopulation or research question that decisions are keyed by.
    One review can have several scopes, each with its own comparator.
 2. A search specialist runs one Boolean search per database, including trial registries. The
-   review's method guidance, or its profile, sets the minimum list of sources.
+   review's method guidance sets the minimum list of sources.
 3. Two people screen titles and abstracts independently, then full texts. They resolve
    disagreements and record a reason for every full-text exclusion.
 4. Records are grouped into studies. One trial typically appears as a paper, follow-up papers,
@@ -89,9 +86,7 @@ for the mode, from the ledger.
 | S single screening with second opinions | One human per record, from a pool of one or more screeners; the records are split evenly in a seeded order. A screener who is unsure decides with a second-opinion flag (key `f`): another screener of the pool gets the record with the first decision and its comment, and their decision settles it. No adjudication, auditor, audit sample, sentinels, or extra screens. | Reads every record, but the queue does not wait for it. The stage may show its reading before the decision (reveal `before`). | Targeted searches that support other work: confounder research, searches for indirect comparisons, and "complete the pool" searches. Working documentation. |
 
 No mode lets the AI exclude a record that no human saw. Changing the mode mid-topic creates a new
-protocol version with a logged reason. A profile can narrow the choice further with a rule, for
-example one that requires two-person screening and a written justification for anything else. Modes M2,
-M3, and S need a `mode_rationale`.
+protocol version with a logged reason. Modes M2, M3, and S need a `mode_rationale`.
 
 ### Documentation levels
 
@@ -114,7 +109,7 @@ Two presets in the protocol editor fill in a topic's settings: "Documented SLR" 
 "Targeted search" (S, working). The methods text, the AI disclosure, and every export label come
 from the settings and the recorded behaviour, never from a preset's name. The protocol compiler
 asks S for a rationale only; it refuses sentinels and an audit sample in S, as nobody would screen
-them. A profile can refuse working documentation with a rule.
+them.
 
 ## The pipeline
 
@@ -143,13 +138,13 @@ The protocol is the source of truth for every later decision. It is versioned JS
 hash. Kittum publishes it only with a recorded approval.
 
 ```text
-Review(title, version, profile: id and version, or none)
+Review(title, version)
 	Scope(id, definition, parent scope, consultation or source reference)
 		Comparator(options, source document, qualifying comparator arms)
-	Endpoint(category from the profile's vocabulary or free text,
+	Endpoint(category: primary | secondary,
 		operationalization, relevance rationale, surrogate validation reference)
-	EffectModifier[] (default: sex, age, disease severity, centre or country)
-	SearchTopic(kind: RCT with the intervention | RCT for indirect comparison | non-randomized | other)
+	EffectModifier[] (the review's own list, empty by default)
+	SearchTopic(label, scopes)
 		Criterion[] (id, PICO slot, polarity, text per language, positive and negative examples,
 			decidable_at: title-abstract | full-text | both, applies_to: scopes)
 		SourcePlan (databases, registries, other methods, justified deviations)
@@ -157,7 +152,6 @@ Review(title, version, profile: id and version, or none)
 		ScreeningMode (M1 | M2 | M3 | S) with AuditPlan, StoppingPlan, and a justification;
 			the documentation level (complete or working) follows from it
 		FreshnessPolicy (maximum search age at submission)
-	extensions (per profile, validated by the profile's schema)
 ```
 
 Criteria are executable. Each criterion compiles to a question that a human answers with a key
@@ -189,9 +183,6 @@ with assistant revisions that nothing can attribute is refused. Every publicatio
 the command line, records these fields (which field, which revision, which model) in its ledger
 event, and every request to the assistant is a ledger event with each attempt's raw request and
 response, failed ones included, so the AI disclosure lists both.
-
-A profile extends this schema through `extensions`. It can, for example, add a level of
-subpopulations above the scopes, or fix the freshness limit.
 
 ### Search
 
@@ -417,8 +408,7 @@ and every override is a ledger event with the quotes and the algorithm's proposa
 and the `risk_of_bias` report renders the table as of any event. Later, the AI may assemble
 quotes for each signalling question; it never answers or judges.
 
-The certainty-of-evidence vocabulary comes from the profile, or is free text. Kittum does not
-model GRADE.
+Kittum does not model certainty of evidence or GRADE.
 
 ### Reports
 
@@ -475,7 +465,7 @@ hypothetical seam, so Kittum does not add a port for it.
 
 | Module | Interface | Hides | Adapters at the seam |
 | --- | --- | --- | --- |
-| `protocol` | `compile(source) -> Protocol`, `diff(a, b) -> ProtocolDiff` | Validation, profile rules and schema extensions, criterion rendering for humans and models, versioning | Profiles |
+| `protocol` | `compile(source) -> Protocol`, `diff(a, b) -> ProtocolDiff` | Validation, criterion rendering for humans and models, versioning | None |
 | `search` | `run(plan) -> SearchExecution` | Query dialects, paging, the PubMed 10,000-record cap, retries, raw capture, PRISMA-S fields | `LiveApi` (PubMed, ClinicalTrials.gov), `FileImport` |
 | `enrich` | `enrich(records) -> Enrichment` | Source choice, token buckets, response cache, retraction checks | OpenAlex, Crossref, Europe PMC, Unpaywall, PubTator |
 | `corpus` | `ingest(executions) -> CorpusRevision`, `link(proposal, receipt) -> IdentityRevision` | Dedupe, record-to-study clustering, occurrence retention | None |
@@ -490,7 +480,7 @@ hypothetical seam, so Kittum does not add a port for it.
 | `report` | `render(target, scope) -> Artifact` | PRISMA, RIS, disclosure templates, bundle layout, the target registry | Targets: `prisma`, `ris`, `bundle`, `ai_disclosure`, `extraction`, `risk_of_bias` |
 
 The `profile` argument of `ledger.seal` is the rights profile that decides which artifacts may
-leave, not a protocol profile.
+leave.
 
 The deletion test favours `screening`, `documents`, and `report` most. Without `screening`, the mode
 rules and blinding would leak into the UI and every stage. Without `report`, file naming rules and
@@ -515,37 +505,9 @@ Kittum maps Janus statuses (`extracted`, `missing`, `ambiguous`, `invalid`, `err
 collapsing them. It reuses Janus's UI patterns but not its mutable review storage, which the ledger
 replaces.
 
-## Profiles
+## What the core guarantees
 
-A profile is what one review community adds to the generic protocol: vocabularies (outcome
-categories, topic kinds), schemas for the protocol's `extensions`, validation rules, its own labels
-for core concepts, and default effect modifiers. A protocol names its profile with `profile: <id>`.
-A review with no profile gets the core instrument, the core report targets, free-text vocabularies,
-and the core labels.
-
-| Part | Example |
-| --- | --- |
-| Protocol schema extensions | A level of subpopulations above the scopes, each with an assigned comparator |
-| Vocabularies | Endpoint categories, certainty-of-evidence levels |
-| Validation rules | A maximum search age, a minimum source list, a required screening mode, a written justification for any other mode |
-| Labels for core concepts | What a scope, a comparator, or an outcome is called in the community's templates |
-
-### Why the mechanism stays without a bundled profile
-
-Kittum ships no profile. The mechanism stays for two reasons.
-
-- `profile` and `extensions` are fields of the protocol document. The protocol hash covers them, and
-  so does every ledger event that references the protocol. Removing the fields would change the
-  document's shape and the hash of every protocol already approved.
-- The rules of one community (how old a search may be, which mode a topic must use) do not belong in
-  the core, and a profile keeps them out. A deployment registers its profile with
-  `kittum.protocol.register_profile` at an entry point, before it compiles or loads a protocol that
-  names it. Core validation calls into the profile and never imports one, so the dependency stays
-  one-way.
-
-### What the core guarantees regardless of profile
-
-A profile can add rules and make existing ones stricter. It cannot weaken these:
+Every review, whatever its protocol says, keeps these:
 
 - The approved protocol is the source of truth, and every exclusion reason is a criterion ID.
 - In a topic with complete documentation, a human commits a decision before seeing AI output, and
@@ -773,9 +735,6 @@ Protocol-derived highlights are allowed before the decision, because they come f
 and not from the AI. They mark protocol terms in the abstract, and drug and disease entities from
 PubTator or the local OpenMed taggers.
 
-Screens show the profile's labels for core concepts where a profile supplies them, so reviewers see
-the terms of their own templates.
-
 ### Screens
 
 | Screen | Shows | Default action and keys |
@@ -927,4 +886,3 @@ which a review receives them often bind more tightly than GDPR.
 | Silent anchor drift after a parser upgrade | Medium, high | Immutable layers; mapping records; review of ambiguous matches |
 | Run-to-run variation questioned | Medium, medium | Name the reproducibility tier; report kappa across runs |
 | PRISMA-trAIce or RAISE changes | High, low | Disclosure stored as data, rendered per template |
-| One community's rules leak into core modules | Medium, medium | Profiles registered at the entry points; core never imports a profile |

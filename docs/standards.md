@@ -1,8 +1,7 @@
 # Standards and regulation
 
 This page maps the standards and laws that apply to any AI-assisted systematic review to the parts
-of Kittum that meet them. Requirements of a particular agency or jurisdiction live in its
-[profile](../DESIGN.md#profiles), and each profile's doc maps them the same way.
+of Kittum that meet them.
 
 The status column says how each fact was confirmed:
 
@@ -21,7 +20,7 @@ The status column says how each fact was confirmed:
 | GAMER (2025) and TRIPOD-LLM (2025) | Reporting guidance for LLM use | Optional disclosure renderings | Reported |
 | Cochrane Handbook | 6.5 (2024), 6.5.1 (2025) | Method reference | Reported |
 | RoB 2 and ROBINS-I V2 (released 2025) | Current risk-of-bias instruments for randomized and non-randomized studies | Core appraisal instruments, forms as data | Reported |
-| GRADE | Current | Not modelled. A deployment can add it through a profile. | Reported |
+| GRADE | Current | Not modelled | Reported |
 
 ## Law and regulation
 

@@ -19,20 +19,16 @@ A source can answer yes to one and no to another.
 
 ## Minimum sources
 
-The review's method guidance, or its [profile](../DESIGN.md#profiles), sets the minimum list of
-sources in its `SourcePlan`. A common baseline for reviews of drug interventions is:
+The review's method guidance sets the minimum list of sources in its `SourcePlan`. A common baseline for reviews of drug interventions is:
 
 - Bibliographic databases: MEDLINE, including in-process citations, and Cochrane CENTRAL. Further
   databases such as Embase are often expected.
 - Registries: ClinicalTrials.gov, EU-CTR, CTIS, and the EMA Clinical Data portal. For EMA Clinical
   Data, a lookup of studies already identified is usually enough.
 
-Some method guidance excludes routine searches of preprint servers, and a profile can enforce that.
+Some method guidance excludes routine searches of preprint servers.
 Preprints found another way (citation chasing, Europe PMC, a manufacturer's list of studies) still go
 through normal screening and quality assessment.
-
-A profile can add sources, such as a lookup on an agency's own website. Each profile's doc lists
-its minimum.
 
 ## Free sources
 

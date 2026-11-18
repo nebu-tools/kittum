@@ -3,7 +3,8 @@
 This page covers what the README leaves out: hosted model recipes, the token budget for models
 that think, the protocol assistant's backend, and how to record a live run and replay it. Every
 setting is an environment variable; [.env.example](../.env.example) lists them all. Commands run
-in `apps/server` with the settings loaded.
+in `apps/server` with the settings loaded, as in the [README](../README.md#try-the-demo), so the
+compose file is `../../infra/compose.yaml`.
 
 ## A hosted model
 
@@ -114,7 +115,7 @@ In the compose Postgres:
 
 ```sh
 export KITTUM_RECORDER_PASSWORD=$(openssl rand -hex 16)
-docker compose -f infra/compose.yaml exec postgres psql -U kittum -d kittum \
+docker compose -f ../../infra/compose.yaml exec postgres psql -U kittum -d kittum \
   -c "create role kittum_recorder login password '$KITTUM_RECORDER_PASSWORD' in role kittum" \
   -c "alter role kittum_recorder set role kittum"   # what it creates belongs to kittum
 export KITTUM_DATABASE_URL=postgresql://kittum_recorder:$KITTUM_RECORDER_PASSWORD@127.0.0.1:55432/kittum
@@ -134,7 +135,11 @@ uv run kittum serve & uv run kittum worker   # click through the run; enrichment
 # endpoints and keys stay unset; KITTUM_RECIPES_FILE and KITTUM_JUDGE_MODEL stay as they were.
 unset KITTUM_GATEWAY_RECORD KITTUM_LLM_RECORD KITTUM_LLM_ENDPOINTS KITTUM_LLM_API_KEYS
 unset EXAMPLE_PROVIDER_API_KEY
-export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum_replay  # created, migrated
+docker compose -f ../../infra/compose.yaml exec postgres psql -U kittum -d kittum \
+  -c "create database kittum_replay"
+docker compose -f ../../infra/compose.yaml run --rm \
+  -e DATABASE_URL='postgres://kittum:kittum@postgres:5432/kittum_replay?sslmode=disable' migrate
+export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum_replay
 export KITTUM_OFFLINE=1
 export KITTUM_GATEWAY_RECORDINGS=.kittum/demo-run/sources
 export KITTUM_LLM_REPLAY=.kittum/demo-run/models
