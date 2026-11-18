@@ -1,4 +1,7 @@
-"""The real transport: httpx2 over HTTP/2, one connection pool, redirects followed.
+"""The real transport: httpx2 over HTTP/2, one connection pool, one request per call.
+
+It never follows a redirect: it returns the 3xx as it came, and the gateway follows it one hop
+at a time, placing each hop's private values itself (`kittum.gateway.redirects`).
 
 HTTP/2 because some publishers' bot protection answers an HTTP/1.1 client with a challenge page
 instead of the PDF it asked for (link.springer.com did in October 2026).
@@ -24,7 +27,7 @@ class HttpxTransport:
 
     def __init__(self, *, timeout: float = 30.0, client: httpx2.Client | None = None) -> None:
         self._client = client or httpx2.Client(
-            timeout=httpx2.Timeout(timeout), follow_redirects=True, http2=True
+            timeout=httpx2.Timeout(timeout), follow_redirects=False, http2=True
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:
@@ -35,6 +38,7 @@ class HttpxTransport:
             params=list(wire.params),
             headers=list(wire.headers),
             content=wire.body,
+            follow_redirects=False,
         )
         body = response.content
         return HttpResponse(
@@ -42,7 +46,6 @@ class HttpxTransport:
             headers=tuple(response.headers.multi_items()),
             body=body,
             body_hash=sha256_hex(body),
-            url=str(response.url),
         )
 
     def close(self) -> None:

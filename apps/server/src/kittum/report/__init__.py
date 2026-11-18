@@ -83,6 +83,7 @@ from kittum.report.prisma import (
     flow,
     flows,
 )
+from kittum.report.prisma import svg as prisma_svg
 from kittum.report.renderers import (
     CORE_RENDERERS,
     RenderedFile,
@@ -389,7 +390,7 @@ def seal_bundle(
 
     The reports render from the same cutoff as the tables, so every count in `reports/` can be
     recomputed from `kittum.sqlite`. A file that holds one of `private`, the deployment's private
-    values, refuses the seal (`kittum.ledger.PrivateValueInBundle`).
+    values, refuses the seal (`kittum.ledger.SealRefused`).
     """
     clock = clock or SystemClock()
     ledger = ledger or PostgresLedger(clock)
@@ -491,6 +492,7 @@ __all__ = [
     "milestones",
     "one_line",
     "preview_decision_import",
+    "prisma_svg",
     "prompt_cards",
     "read_request",
     "record_render",

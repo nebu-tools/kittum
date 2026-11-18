@@ -11,6 +11,7 @@ will, so their hashes agree.
 import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 import httpx2
 import pytest
@@ -86,7 +87,7 @@ def test_a_recording_is_keyed_by_the_public_request_and_holds_no_private_value(
             recording.send(request)
         assert SECRET not in str(caught.value) and ALICE not in str(caught.value)
 
-    # A private value a caller put into the URL or the query, in any case: refused, unnamed.
+    # A private value a caller put into the URL or the query, in any listed spelling: refused, unnamed.
     refused(
         HttpRequest(
             url="https://api.crossref.org/works/10.1000%2Fx", params=(("client_secret", SECRET),)
@@ -99,7 +100,7 @@ def test_a_recording_is_keyed_by_the_public_request_and_holds_no_private_value(
         "configured private value",
     )
     refused(
-        HttpRequest(url=f"https://api.crossref.org/works/10.1000%2Fx?query.author={ALICE.upper()}"),
+        HttpRequest(url=f"https://api.crossref.org/works/10.1000%2Fx?query.author={quote(ALICE)}"),
         "configured private value",
     )
     assert live.sent == []  # nothing refused was sent

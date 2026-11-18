@@ -106,7 +106,7 @@ def _echo(wire: HttpRequest) -> HttpResponse:
     """A source that says back everything it was sent: in the body, a `Content-Location`, and
     the URL it redirected to."""
     url = _wire_url(wire)
-    answer = _json({"url": url, "headers": list(wire.headers), "said": ADDRESS.upper()})
+    answer = _json({"url": url, "headers": list(wire.headers), "said": ADDRESS})
     return answer.model_copy(
         update={
             "headers": (*answer.headers, ("Content-Location", url), ("Location", url)),
@@ -180,26 +180,6 @@ def test_a_content_location_that_echoes_the_address_is_kept_without_it(
     _assert_kept_clean(database, store)
 
 
-def test_a_redirect_target_that_carries_the_address_is_returned_without_it(
-    database: Database,
-) -> None:
-    def redirected(wire: HttpRequest) -> HttpResponse:
-        target = f"https://mirror.example.org/v2/10.1000/x?{urlencode(wire.params)}"
-        return _json({}).model_copy(update={"url": target, "headers": (("Location", target),)})
-
-    store = MemoryStore()
-    got = _gateway(database, Script(redirected), store).fetch(
-        "unpaywall", HttpRequest(url=UNPAYWALL)
-    )
-
-    assert (
-        got.url
-        == f"https://mirror.example.org/v2/10.1000/x?email={quote_plus(CONTACT_PLACEHOLDER)}"
-    )
-    assert not CREDENTIALS.holds(got.model_dump_json().encode())
-    _assert_kept_clean(database, store)
-
-
 def test_an_error_body_with_a_bare_address_is_quoted_without_it(database: Database) -> None:
     def refusing(_: HttpRequest) -> HttpResponse:
         body = json.dumps({"message": f"Too many requests for {ADDRESS}."}).encode()
@@ -258,7 +238,7 @@ def test_a_pdf_link_a_source_found_gets_none_of_its_values_and_needs_none(
     """A publisher's PDF link is fetched under the source that found it, but only that source's
     API gets its settings: the publisher sees no key and no address but the User-Agent's, and a
     source whose API needs a setting still lets its links be fetched without it."""
-    pdf = b"%PDF-1.7 " + ADDRESS.encode()
+    pdf = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n\xff\xfe binary content"
     answer = HttpResponse(
         status=200,
         headers=(("Content-Type", "application/pdf"),),

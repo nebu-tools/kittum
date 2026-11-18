@@ -30,14 +30,14 @@ import os
 import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 
 import httpx2
 
 from kittum.core import sha256_hex
 from kittum.gateway.credentials import NO_CREDENTIALS, Credentials
 from kittum.gateway.errors import GatewayError
-from kittum.gateway.types import HttpRequest, HttpResponse, effective_request
+from kittum.gateway.types import HttpRequest, HttpResponse, request_url
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -62,12 +62,11 @@ def recording_key(request: HttpRequest, credentials: Credentials = NO_CREDENTIAL
 
     A URL with user info, or with one of the configured private values anywhere, raises
     `RecordingRefused`: no caller puts one there, so one that does is a bug to stop at."""
-    request = effective_request(request)
     split = urlsplit(request.url)
     if "@" in split.netloc:
         raise RecordingRefused(f"{split.hostname}: the URL carries user info")
-    key = request.url + ("?" + urlencode(request.params) if request.params else "")
-    if credentials.holds(key.encode()):
+    key = request_url(request)
+    if credentials.holds(key):
         raise RecordingRefused(f"{split.hostname}: the URL carries a configured private value")
     return key
 

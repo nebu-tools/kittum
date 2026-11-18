@@ -2,21 +2,26 @@
 
 Callers never hold the contact address or an API key. A source adapter builds its request with
 neither; `PLACEMENTS` says, per source, which setting goes into which query parameter or header,
-and the gateway attaches them (`Credentials.attach`) only for the send. Hashes, the cache,
-recordings, and logs use the request as the adapter built it.
+and on which host. The gateway attaches them (`Credentials.attach`) only for the send, one hop
+at a time (`kittum.gateway.redirects`): a hop gets the values placed for its own host, and a hop
+over plain http gets none. Hashes, the cache, recordings, and logs use the request as the
+adapter built it.
 
 What comes back passes `Credentials.scrub` before the gateway stores, caches, or returns it, or
-quotes it in an error: every configured private value, plain or percent-encoded, is replaced in
-the post-redirect URL, every retained header, and a text body. A binary body, such as a PDF, is
-left as it is.
+quotes it in an error. It replaces every configured private value, in each spelling
+`kittum.core.PrivateValues` recognises, in the URL, every header, and a text body. A body is text
+when it decodes in its declared charset or as UTF-8, whatever its `Content-Type`; any other body
+is binary, is never rewritten, and is refused (`PrivateValueInResponse`) if it holds a value.
 """
 
+import functools
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
-from urllib.parse import quote, quote_plus, urlsplit
+from urllib.parse import quote, urlsplit
 
-from kittum.core import Record, sha256_hex
+from kittum.core import PrivateValues, Record, sha256_hex
+from kittum.gateway.errors import PrivateValueInResponse
 from kittum.gateway.types import Credential, HttpRequest, HttpResponse
 
 if TYPE_CHECKING:
@@ -84,28 +89,6 @@ def placements(source: str) -> tuple[Placement, ...]:
     return (*EVERY_SOURCE, *PLACEMENTS.get(source, ()))
 
 
-def spellings(value: str) -> tuple[str, ...]:
-    """`value` as it may appear in a URL, a header, or a body: percent-encoded both ways, and
-    plain. Longest first, so a replacement never leaves part of an encoded form behind."""
-    found = dict.fromkeys((quote_plus(value), quote(value, safe=""), value))
-    return tuple(sorted(found, key=len, reverse=True))
-
-
-_BINARY = re.compile(
-    r"^(application/(pdf|octet-stream|zip|gzip|x-gzip|x-tar|epub\+zip)|image/|audio/|video/|font/)",
-    re.IGNORECASE,
-)
-
-
-def is_text(response: HttpResponse) -> bool:
-    """Whether a body is text a source may have echoed a value into: anything but a PDF or
-    another binary type, by its `Content-Type` or, without one, by its first bytes."""
-    content_type = next((v for k, v in response.headers if k.lower() == "content-type"), "")
-    if _BINARY.match(content_type.strip()):
-        return False
-    return response.body.lstrip()[:5] != b"%PDF-"
-
-
 @dataclass(frozen=True)
 class Credentials:
     """The configured private values: the settings `PLACEMENTS` places, and `secrets`, the other
@@ -160,45 +143,50 @@ class Credentials:
         )
 
     def attach(self, source: str, request: HttpRequest) -> HttpRequest:
-        """`request` with the source's configured settings attached for the send. Its URL, query,
-        and headers stay as the adapter built them; the transport adds `credentials`."""
-        host = urlsplit(request.url).hostname or ""
+        """`request` with the source's configured settings for its own host attached for the
+        send, and no others. A request over plain http gets none at all. Its URL, query, and
+        headers stay as the adapter built them; the transport places `credentials`."""
+        split = urlsplit(request.url)
+        host = split.hostname or ""
         attached = tuple(
             Credential(kind=p.kind, name=p.name, value=p.template.format(self.values[p.setting]))
             for p in placements(source)
-            if p.setting in self.values and (p.host is None or p.host == host)
+            if split.scheme == "https"
+            and p.setting in self.values
+            and (p.host is None or p.host == host)
         )
-        return request.model_copy(update={"credentials": attached}) if attached else request
+        return request.model_copy(update={"credentials": attached})
 
     # -- scrubbing ---------------------------------------------------------------------------
 
-    def _replacements(self) -> list[tuple[str, str]]:
-        contact = self.values.get("contact_email")
-        pairs: list[tuple[str, str]] = []
-        for value in self.private:
-            stand_in = CONTACT_PLACEHOLDER if value == contact else REDACTED
-            pairs += [
-                (s, quote_plus(stand_in) if s != value else stand_in) for s in spellings(value)
-            ]
-        return sorted(pairs, key=lambda p: len(p[0]), reverse=True)
+    @functools.cached_property
+    def matcher(self) -> PrivateValues:
+        """Recognises every configured private value (`kittum.core.PrivateValues`)."""
+        return PrivateValues(self.private)
+
+    def _stand_in(self, value: str, plain: bool) -> str:
+        stand_in = CONTACT_PLACEHOLDER if value == self.values.get("contact_email") else REDACTED
+        return stand_in if plain else quote(stand_in, safe="")
 
     def scrub_text(self, text: str) -> str:
-        """`text` with every configured private value replaced, in any spelling."""
-        for value, stand_in in self._replacements():
-            text = re.sub(re.escape(value), lambda _, s=stand_in: s, text, flags=re.IGNORECASE)
-        return text
-
-    def scrub_bytes(self, data: bytes) -> bytes:
-        for value, stand_in in self._replacements():
-            data = re.sub(re.escape(value.encode()), stand_in.encode(), data, flags=re.IGNORECASE)
-        return data
+        """`text` with every configured private value replaced, in any recognised spelling."""
+        return self.matcher.replace(text, self._stand_in)
 
     def scrub(self, response: HttpResponse) -> HttpResponse:
         """`response` as the gateway may keep and return it: the URL, every header, and a text
-        body without a configured private value. A binary body is left alone."""
-        if not self.private:
+        body without a configured private value. A binary body is kept as it came, unless it
+        holds a private value: then `PrivateValueInResponse` is raised and nothing is kept."""
+        if not self.matcher:
             return response
-        body = self.scrub_bytes(response.body) if is_text(response) else response.body
+        decoded = _decoded(response)
+        if decoded is None:
+            if self.matcher.holds(response.body):
+                raise PrivateValueInResponse()
+            body = response.body
+        else:
+            text, encoding = decoded
+            scrubbed = self.scrub_text(text)
+            body = response.body if scrubbed == text else scrubbed.encode(encoding)
         return response.model_copy(
             update={
                 "url": None if response.url is None else self.scrub_text(response.url),
@@ -210,10 +198,27 @@ class Credentials:
             }
         )
 
-    def holds(self, data: bytes) -> bool:
-        """Whether `data` holds a configured private value, in any spelling."""
-        folded = data.lower()
-        return any(s.lower().encode() in folded for v in self.private for s in spellings(v))
+    def holds(self, data: str | bytes) -> bool:
+        """Whether `data` holds a configured private value, in any recognised spelling."""
+        return self.matcher.holds(data)
+
+
+_CHARSET = re.compile(r"""charset\s*=\s*["']?([^"';\s]+)""", re.IGNORECASE)
+
+
+def _decoded(response: HttpResponse) -> tuple[str, str] | None:
+    """The body as text, with the encoding it decoded in: its declared charset, else UTF-8. None
+    when it decodes in neither, which makes it binary."""
+    content_type = next((v for k, v in response.headers if k.lower() == "content-type"), "")
+    declared = _CHARSET.search(content_type)
+    for encoding in (declared.group(1) if declared else None, "utf-8"):
+        if encoding is None:
+            continue
+        try:
+            return response.body.decode(encoding), encoding
+        except LookupError, UnicodeDecodeError:
+            continue
+    return None
 
 
 NO_CREDENTIALS = Credentials()
@@ -228,7 +233,5 @@ __all__ = [
     "Credentials",
     "Placement",
     "Setting",
-    "is_text",
     "placements",
-    "spellings",
 ]

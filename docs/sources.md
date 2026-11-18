@@ -105,6 +105,75 @@ All outbound HTTP goes through one gateway inside `enrich` and `search`:
 Federation never splits a primary strategy across sources. A primary search on a source that is out
 of budget waits.
 
+## Private values
+
+Kittum's private values are the contact address, every source key, the database password, and
+the model servers' keys. Nothing Kittum caches, stores, records, or seals may hold one.
+
+### Startup rule
+
+Every configured key and password must be at least 12 characters long, not a common password, and
+not part of what Kittum itself sends (its name, the User-Agent, the stand-ins below). Kittum cannot
+tell a shorter or ordinary value from ordinary content. The server, the worker, the CLI, and
+recording refuse to start otherwise, with a message that names the setting and the rule. The dev
+and CI database password is `kittum-local-dev`.
+
+### Where values go
+
+An adapter builds a request without private values. The gateway places each value for the send
+only, and only in requests to its own source's host over https (the contact address in the
+User-Agent goes to every https host). A request over plain http gets none.
+
+The HTTP client never follows a redirect; the gateway does, one hop at a time, at most 10 hops.
+Each hop is built again from the request without private values, and gets the values for its own
+host only. A cookie or `Authorization` header the adapter set stays on its own host. A query
+parameter of the `Location` that holds a private value is dropped (the gateway places what the
+host should get). A private value elsewhere in the `Location`, a redirect loop, more than 10 hops,
+or a target that is not http or https is a source error. The attempt row lists each hop as built.
+
+### What the matcher recognises
+
+One matcher, used by the gateway's scrub, the recording checks, and the seal scan, recognises each
+value in exactly these spellings:
+
+- each character written literally, as `%XX` for each of its UTF-8 bytes (hex digits in either
+  case, whether or not the character needs encoding), as a JSON `\uXXXX` escape, or as a JSON
+  backslash escape (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`); `+` for a space; chosen
+  independently for each character;
+- the base64 and base64url form of the value, at each of the three alignments it can take inside
+  longer base64 text.
+
+It recognises nothing else: not the value in another letter case, not split by line breaks, not in
+other encodings. A search takes time linear in the size of what is searched.
+
+### Responses
+
+Every hop's response is scrubbed: in its URL, its headers, and a text body, each spelling of a
+value is replaced by `contact@example.invalid` for the contact address and by `[redacted]` for the
+others (percent-encoded where the value was). Whether a body is text is decided from its bytes: a
+body that decodes in its declared charset or as UTF-8 is text, whatever its content type says. A
+binary body is never rewritten, but it is searched; one that holds a private value is an error for
+that request, and nothing of it is stored or cached.
+
+### Sealed bundles
+
+Before a bundle is sealed, every file is searched as it is, and what it contains by its first
+bytes:
+
+- an SQLite file: every value of every table, read through sqlite, and the schema;
+- a zip or a zip-based format such as a spreadsheet: every member, inflated;
+- gzip: the inflated content;
+- a PDF: every object, every stream decoded through its text filters (FlateDecode,
+  ASCIIHexDecode, ASCII85Decode, LZWDecode, chained), and the text of each page as PyMuPDF
+  extracts it.
+
+Image filters (DCTDecode, JPXDecode, CCITTFaxDecode, JBIG2Decode) are not decoded, so a value
+drawn into an image is not found. Containers are opened at most 4 deep; one decoded piece may be at
+most 64 MiB, and all that one file decodes to at most 512 MiB. A file that holds a private value,
+goes over a limit, or cannot be decoded where it should be (a broken archive, an encrypted member
+or PDF, a filter the scan does not know) stops the seal with an error naming the file and the
+reason.
+
 ## Full-text waterfall
 
 For each report that passes title and abstract screening and has no usable full text, Kittum tries

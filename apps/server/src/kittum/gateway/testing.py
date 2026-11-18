@@ -10,9 +10,11 @@ from kittum.gateway import (
     HttpRequest,
     HttpResponse,
     SourceNotConfigured,
+    SourceUnavailable,
     Transport,
     unreached,
 )
+from kittum.gateway.redirects import RedirectRefused, send_following
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -60,8 +62,8 @@ class FakeTransport:
 class PassThroughGateway:
     """A gateway with no limits, cache, or retries. Lets modules run without the real one.
 
-    It places and scrubs `credentials` as the real one does, so a test sees what a source is
-    sent and what Kittum keeps."""
+    It follows redirects, places and scrubs `credentials` as the real one does, so a test sees
+    what a source is sent and what Kittum keeps."""
 
     def __init__(self, transport: Transport, credentials: Credentials = NO_CREDENTIALS) -> None:
         self._transport = transport
@@ -72,12 +74,14 @@ class PassThroughGateway:
         if missing is not None:
             raise SourceNotConfigured(source, missing)
         try:
-            response = self._transport.send(self._credentials.attach(source, request))
+            response, _ = send_following(self._transport, self._credentials, source, request)
+        except RedirectRefused as error:
+            raise SourceUnavailable(source, error.status, 1, error.reason) from None
         except GatewayError:
             raise
         except Exception as error:
             raise unreached(source, error) from None
-        return self._credentials.scrub(response)
+        return response
 
     def configured(self, source: str) -> bool:
         return self._credentials.configured(source)

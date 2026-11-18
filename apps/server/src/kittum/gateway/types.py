@@ -2,7 +2,7 @@
 
 import importlib.metadata
 from typing import Literal, Protocol
-from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import Field
 
@@ -80,7 +80,8 @@ class HttpRequest(Record):
 
 
 class HttpResponse(Record):
-    """A response. `url` is where it came from after redirects, when the transport knows."""
+    """A response. `url` is the URL of the hop that answered, after any redirects, as the gateway
+    built it (`kittum.gateway.redirects`)."""
 
     status: int
     headers: tuple[tuple[str, str], ...]
@@ -110,6 +111,13 @@ def effective_request(request: HttpRequest) -> HttpRequest:
     return request.model_copy(update={"url": url, "params": params})
 
 
+def request_url(request: HttpRequest) -> str:
+    """The URL with its whole query, as the caller built it: what a log line, a recording key,
+    or a redirect chain names."""
+    request = effective_request(request)
+    return request.url + ("?" + urlencode(request.params) if request.params else "")
+
+
 class Gateway(Protocol):
     def fetch(
         self, source: str, request: HttpRequest, *, use_cache: bool = True
@@ -129,5 +137,6 @@ __all__ = [
     "SourcePolicy",
     "Transport",
     "effective_request",
+    "request_url",
     "user_agent",
 ]

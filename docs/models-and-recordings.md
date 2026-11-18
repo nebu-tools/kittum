@@ -106,26 +106,17 @@ The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a 
 the demo assistant (`KITTUM_ASSIST_BACKEND=demo`), which is refused beside `KITTUM_LLM_REPLAY`
 rather than silently replaced by it or shadowing it: replay the assistant from one recording.
 
-Recording checks every configured key and password before it starts: each must be at least 12
-characters, not a common password, and not part of what Kittum itself sends (PubMed's
-`tool=kittum`, the User-Agent, the placeholder). Otherwise ordinary requests and bodies would hold
-the "secret" and be refused or redacted, so Kittum refuses to start, naming the setting. The dev
-database password `kittum` is such a password: record with a role of its own that has a long one.
-In the compose Postgres:
-
-```sh
-export KITTUM_RECORDER_PASSWORD=$(openssl rand -hex 16)
-docker compose -f ../../infra/compose.yaml exec postgres psql -U kittum -d kittum \
-  -c "create role kittum_recorder login password '$KITTUM_RECORDER_PASSWORD' in role kittum" \
-  -c "alter role kittum_recorder set role kittum"   # what it creates belongs to kittum
-export KITTUM_DATABASE_URL=postgresql://kittum_recorder:$KITTUM_RECORDER_PASSWORD@127.0.0.1:55432/kittum
-```
+Recording writes nothing that holds a configured key, password, or the contact address, in any
+spelling the matcher recognises (see [Private values](sources.md#private-values)): a request that
+holds one is refused, and a response is scrubbed as the gateway scrubs it. Every key and password
+must therefore pass the startup rule there; recording uses the same check as the server, the
+worker, and the CLI. The dev database password `kittum-local-dev` passes it.
 
 For example, the demo with a hosted judge, recorded once into `.kittum/demo-run/` and replayed in
 a fresh database:
 
 ```sh
-# Record: live sources and the live model, as kittum_recorder.
+# Record: live sources and the live model.
 export KITTUM_GATEWAY_RECORD=.kittum/demo-run/sources
 export KITTUM_LLM_RECORD=.kittum/demo-run/models
 uv run kittum demo seed --live
@@ -138,8 +129,8 @@ unset EXAMPLE_PROVIDER_API_KEY
 docker compose -f ../../infra/compose.yaml exec postgres psql -U kittum -d kittum \
   -c "create database kittum_replay"
 docker compose -f ../../infra/compose.yaml run --rm \
-  -e DATABASE_URL='postgres://kittum:kittum@postgres:5432/kittum_replay?sslmode=disable' migrate
-export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum_replay
+  -e DATABASE_URL='postgres://kittum:kittum-local-dev@postgres:5432/kittum_replay?sslmode=disable' migrate
+export KITTUM_DATABASE_URL=postgresql://kittum:kittum-local-dev@127.0.0.1:55432/kittum_replay
 export KITTUM_OFFLINE=1
 export KITTUM_GATEWAY_RECORDINGS=.kittum/demo-run/sources
 export KITTUM_LLM_REPLAY=.kittum/demo-run/models

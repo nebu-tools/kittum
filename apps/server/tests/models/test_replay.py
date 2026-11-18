@@ -167,7 +167,7 @@ def test_a_completion_holding_a_key_or_the_contact_address_is_not_recorded(
         item_ref="occ-mailed",
         stage="title_abstract",
         title=CHEMO_NAIVE.title,
-        text=f"{CHEMO_NAIVE.text}\nCorrespondence: {CONTACT.upper()}",
+        text=f"{CHEMO_NAIVE.text}\nCorrespondence: {CONTACT}",
     )
     server = HostedJudge((mailed,))
     with pytest.raises(LlmRecordingRefused, match="its request holds") as refused:

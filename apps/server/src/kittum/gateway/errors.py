@@ -42,6 +42,14 @@ class SourceNotConfigured(GatewayError):
         self.setting = setting
 
 
+class PrivateValueInResponse(GatewayError):
+    """A binary response holds one of the deployment's private values. A binary body is never
+    rewritten, so the gateway keeps nothing of it: no cache entry, no recording, no result."""
+
+    def __init__(self) -> None:
+        super().__init__("a binary response holds a configured private value, so it was not kept")
+
+
 class SourceUnavailable(GatewayError):
     """Every attempt failed with a status worth retrying, or (with `reason`, and no status) the
     source could not be reached at all, as offline with no recorded response. `message` is what
@@ -83,6 +91,7 @@ def unreached(source: str, error: BaseException, attempts: int = 1) -> SourceUna
 
 __all__ = [
     "GatewayError",
+    "PrivateValueInResponse",
     "SourceBudgetExhausted",
     "SourceNotConfigured",
     "SourceUnavailable",

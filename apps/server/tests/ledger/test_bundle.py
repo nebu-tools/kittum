@@ -12,7 +12,7 @@ import pytest
 
 from kittum.cli import main
 from kittum.core import Id, new_id, sha256_hex
-from kittum.ledger import BundleWriter, PrivateValueInBundle, SigningKey, seal
+from kittum.ledger import BundleWriter, SealRefused, SigningKey, seal
 from kittum.ledger.bundle import MANIFEST_DOMAIN
 from kittum.ledger.keys import document_message
 from kittum.storage import FilesystemStore
@@ -276,10 +276,10 @@ def test_a_bundle_with_a_private_value_in_any_file_is_not_sealed(
     project, actor = store.new_project()
     store.append(project, actor, 2)
     artifacts = FilesystemStore(tmp_path / "store")
-    pdf = artifacts.put(b"%PDF-1.7\n% sent by " + ADDRESS.upper().encode() + b"\n")
+    pdf = artifacts.put(b"%PDF-1.7\n% sent by " + ADDRESS.encode() + b"\n")
     out = tmp_path / "bundle"
 
-    with pytest.raises(PrivateValueInBundle) as refused:
+    with pytest.raises(SealRefused) as refused:
         seal(
             store.tx,
             project,

@@ -112,7 +112,7 @@ class Settings:
         env = os.environ
         return cls(
             database_url=env.get(
-                "KITTUM_DATABASE_URL", "postgresql://kittum:kittum@127.0.0.1:55432/kittum"
+                "KITTUM_DATABASE_URL", "postgresql://kittum:kittum-local-dev@127.0.0.1:55432/kittum"
             ),
             artifact_dir=Path(env.get("KITTUM_ARTIFACT_DIR", ".kittum/artifacts")),
             contact_email=env.get("KITTUM_CONTACT_EMAIL"),

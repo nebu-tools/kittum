@@ -10,6 +10,7 @@ from kittum.core.errors import KittumError, NotFoundError
 from kittum.core.hashing import Sha256, canonical_json, content_hash, sha256_hex
 from kittum.core.ids import Id, new_id
 from kittum.core.model import Record
+from kittum.core.private import PrivateValues
 from kittum.core.text import Span, find_quote
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "Id",
     "KittumError",
     "NotFoundError",
+    "PrivateValues",
     "Record",
     "Sha256",
     "Span",

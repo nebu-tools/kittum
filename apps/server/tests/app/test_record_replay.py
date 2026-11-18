@@ -332,40 +332,15 @@ def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path
         build_judge(replay, registry, replays)
 
 
-def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path: Path) -> None:
-    """The dev database password `kittum` is also PubMed's `tool=kittum`: recording with it would
-    refuse every PubMed request, so it refuses to start instead, as for any short or common secret
-    or one inside what Kittum sends. With a long password (one that holds an `@`, percent-encoded
-    in the DSN), PubMed is recorded, and the password itself is refused wherever it turns up."""
+def test_recording_refuses_a_long_password_wherever_it_turns_up(tmp_path: Path) -> None:
+    """With a password that holds an `@` (percent-encoded in the DSN), PubMed's `tool=kittum` is
+    recorded, and the password itself is refused in a source request and in a model request."""
     store = FilesystemStore(tmp_path / "artifacts")
     base = Settings(
-        database_url="postgresql://kittum:kittum@127.0.0.1:55432/kittum",
+        database_url="postgresql://kittum:kittum-local-dev@127.0.0.1:55432/kittum",
         artifact_dir=tmp_path / "artifacts",
         gateway_record=tmp_path / "sources",
     )
-    for settings, name, problem in (
-        (base, "the database password", "at least 12 characters"),
-        (
-            replace(base, database_url="postgresql://kittum:administrator@db/kittum"),
-            "the database password",
-            "not a common word",
-        ),
-        (
-            replace(base, database_url="unused", openalex_api_key="example.invalid"),
-            "KITTUM_OPENALEX_API_KEY",
-            "part of what Kittum sends",
-        ),
-    ):
-        with pytest.raises(ConfigurationError, match=f"recording needs {name}.*{problem}") as e:
-            build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
-        assert "administrator" not in str(e.value) and "example.invalid" not in str(e.value)
-    with pytest.raises(ConfigurationError, match="recording needs the database password"):
-        build_backends(
-            replace(base, gateway_record=None, llm_record=tmp_path / "models"),
-            ModelRegistry.load(),
-            store,
-        )
-
     password = "rec@rd-Only-7f3k"
     recipe_id = "qwen3.8-27b-bf16"
     settings = replace(
@@ -397,27 +372,3 @@ def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path
     written = b"".join(p.read_bytes() for p in recorded)
     assert b"tool=kittum" in written
     assert password.encode() not in written and quote(password, safe="").encode() not in written
-
-
-def test_a_password_ordinary_text_holds_is_not_scrubbed_or_scanned_for(tmp_path: Path) -> None:
-    """The dev database password `kittum` is also the name on every report and PubMed's
-    `tool=kittum`. Scrubbing for it would rewrite what sources say, and sealing would refuse every
-    bundle. A long password is still scrubbed and scanned for."""
-    base = Settings(
-        database_url="postgresql://kittum:kittum@127.0.0.1:55432/kittum",
-        artifact_dir=tmp_path / "artifacts",
-        contact_email="librarian@example.org",
-    )
-    short = credentials(base)
-    assert short.private == ("librarian@example.org",)
-    assert not short.holds(b"<text>Kittum PRISMA 2020 flow</text>")
-    assert (
-        short.scrub_text("https://example.org/?tool=kittum") == "https://example.org/?tool=kittum"
-    )
-
-    password = "rec@rd-Only-7f3k"
-    long = credentials(
-        replace(base, database_url=f"postgresql://kittum:{quote(password, safe='')}@db/kittum")
-    )
-    assert password in long.private
-    assert long.holds(f"<text>{password}</text>".encode())

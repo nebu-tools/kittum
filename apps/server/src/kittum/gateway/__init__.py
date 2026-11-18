@@ -4,7 +4,7 @@ Per-source rate buckets persisted in Postgres, a safety margin under every publi
 `Retry-After` handling, retries with jitter, daily budgets, and a content-addressed response
 cache. A rerun of a frozen strategy makes no network calls. Callers never hold the contact
 address or an API key: `PLACEMENTS` says where each goes, the gateway attaches them for the send
-only, and scrubs them from all that comes back (`kittum.gateway.credentials`).
+only, follows redirects itself one hop at a time, and scrubs them from all that comes back (`kittum.gateway.credentials`).
 `RecordingTransport` records a live run's responses and `RecordedTransport` answers from them,
 for a stack that must stay offline.
 
@@ -31,6 +31,7 @@ from kittum.gateway.credentials import (
 )
 from kittum.gateway.errors import (
     GatewayError,
+    PrivateValueInResponse,
     SourceBudgetExhausted,
     SourceNotConfigured,
     SourceUnavailable,
@@ -46,6 +47,7 @@ from kittum.gateway.recorded import (
     RecordingTransport,
     recording_key,
 )
+from kittum.gateway.redirects import MAX_REDIRECTS, RedirectRefused
 from kittum.gateway.service import MAX_ATTEMPTS, SourceGateway, request_hash
 from kittum.gateway.transport import HttpxTransport
 from kittum.gateway.types import (
@@ -62,6 +64,7 @@ __all__ = [
     "CONTACT_PLACEHOLDER",
     "MARGIN",
     "MAX_ATTEMPTS",
+    "MAX_REDIRECTS",
     "MESSAGE_LENGTH",
     "NO_CREDENTIALS",
     "PLACEMENTS",
@@ -75,9 +78,11 @@ __all__ = [
     "HttpxTransport",
     "NotRecorded",
     "Placement",
+    "PrivateValueInResponse",
     "RecordedTransport",
     "RecordingRefused",
     "RecordingTransport",
+    "RedirectRefused",
     "SourceBudgetExhausted",
     "SourceGateway",
     "SourceNotConfigured",

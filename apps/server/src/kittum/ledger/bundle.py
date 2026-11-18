@@ -25,13 +25,22 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
-from urllib.parse import quote, quote_plus
 from uuid import UUID
 
-from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_json, sha256_hex
+from kittum.core import (
+    Id,
+    KittumError,
+    PrivateValues,
+    Record,
+    Sha256,
+    SystemClock,
+    canonical_json,
+    sha256_hex,
+)
 from kittum.ledger.keys import VerifyKey, document_message
 from kittum.ledger.model import AuditEvent, Checkpoint, EventDraft, LedgerIntegrityError
 from kittum.ledger.postgres import PostgresLedger
+from kittum.ledger.scan import ScanRefused, holds_private
 from kittum.ledger.sqlite import NO_TX, SqliteLedger
 from kittum.ledger.verify import verify_chain
 
@@ -228,33 +237,33 @@ class Bundle(Record):
     checkpoint: Checkpoint
 
 
-class PrivateValueInBundle(KittumError):
+class SealRefused(KittumError):
     """A file of the bundle holds one of the deployment's private values (the contact address,
-    an API key, a password). The bundle is removed and not sealed."""
+    an API key, a password), or the scan cannot read through it (`kittum.ledger.scan`). The
+    bundle is removed and not sealed. `file` is the file, `reason` what is wrong with it."""
 
-    def __init__(self, file: str) -> None:
-        super().__init__(
-            f"the bundle file {file} holds a configured private value (the contact address, a key,"
-            " or a password), so the bundle was not sealed"
-        )
+    def __init__(self, file: str, reason: str) -> None:
+        super().__init__(f"the bundle file {file} {reason}, so the bundle was not sealed")
         self.file = file
+        self.reason = reason
 
 
-def _holding_private(out_dir: Path, private: Iterable[str]) -> str | None:
-    """The first file under `out_dir`, binary ones included, that holds one of `private`, plain
-    or percent-encoded, in any case."""
-    needles = {
-        s.lower().encode()
-        for value in private
-        if value
-        for s in (value, quote_plus(value), quote(value, safe=""))
-    }
-    if not needles:
+def _refusal(out_dir: Path, private: Iterable[str]) -> SealRefused | None:
+    """Why the files under `out_dir` cannot be sealed, or None: the first that holds one of
+    `private`, as it is or inside what it contains, or that the scan cannot read through."""
+    matcher = PrivateValues(private)
+    if not matcher:
         return None
     for path in sorted(p for p in out_dir.rglob("*") if p.is_file()):
-        folded = path.read_bytes().lower()
-        if any(n in folded for n in needles):
-            return path.relative_to(out_dir).as_posix()
+        rel = path.relative_to(out_dir).as_posix()
+        try:
+            if holds_private(path.read_bytes(), matcher, rel):
+                return SealRefused(
+                    rel,
+                    "holds a configured private value (the contact address, a key, or a password)",
+                )
+        except ScanRefused as refused:
+            return SealRefused(rel, f"cannot be scanned for private values: {refused}")
     return None
 
 
@@ -283,8 +292,9 @@ def seal(
     the files stay behind but the ledger never mentions them.
 
     Before the seal is recorded, every file written is scanned for each of `private`, the
-    deployment's private values; one that holds any removes the bundle and raises
-    `PrivateValueInBundle`, naming the file.
+    deployment's private values, inside compressed content too (`kittum.ledger.scan`). A file
+    that holds one, or that the scan cannot read through, removes the bundle and raises
+    `SealRefused`, naming the file and the reason.
     """
     ledger = ledger or PostgresLedger(clock)
     clock = clock or SystemClock()
@@ -358,10 +368,10 @@ def seal(
     manifest["signature"] = signer.sign(document_message(manifest, domain=MANIFEST_DOMAIN))
     (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
     manifest_hash = _manifest_hash(manifest)
-    leaked = _holding_private(out_dir, private)
-    if leaked is not None:
+    refused = _refusal(out_dir, private)
+    if refused is not None:
         shutil.rmtree(out_dir)
-        raise PrivateValueInBundle(leaked)
+        raise refused
 
     ledger.append(
         tx,
