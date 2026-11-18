@@ -15,12 +15,12 @@ One call judges every applicable criterion for one record. The design choices:
   reviewers and the judge are asked the same question. Nothing in the prompt varies between runs,
   so the rendered prompt is a cache key.
 - A topic's `JudgeInstructions` edit the prompt: the strictness picks the stage rule
-  (`conservative` is the rule every topic had before; `decisive` also excludes what a record
-  makes improbable), and the team's guidance follows it in a fixed frame. A team may also replace
-  the whole system message and the user message template with its own wording; Kittum then fills
-  `{stage_rule}`, `{stage}`, `{criteria}`, `{tag}`, `{title}`, and `{text}` where they appear.
-  The answer schema and the quote check stay whatever the wording. A topic without instructions
-  gets exactly the prompt it got before.
+  (`conservative`, the default, excludes only on contradiction; `decisive` also excludes what a
+  record makes improbable), and the team's guidance follows it in a fixed frame. A team may
+  also replace the whole system message and the user message template with its own wording;
+  Kittum then fills `{stage_rule}`, `{stage}`, `{criteria}`, `{tag}`, `{title}`, and `{text}`
+  where they appear. The answer schema and the quote check stay whatever the wording. A topic
+  without instructions gets the conservative rule and no guidance.
 
 Prompt versions. A judge config names its version, and everything that renders or identifies
 its prompt (`build_request`, `rendered_prompt`, `register_config`, `prompt_template_hash`,
@@ -42,9 +42,8 @@ registered with. Verdicts, stored requests, and recordings keyed by the request 
 
 Add a version (and keep the old one) with any change to the fixed wording or to how criteria are
 rendered, and bump `INSTRUCTIONS_VERSION` with any change to the strictness wordings or the
-guidance frame. The prompt template hash covers the conservative rule, so configs registered
-before topics had instructions keep it; `instructions_hash` covers the wording a topic's
-instructions select.
+guidance frame. The prompt template hash covers the conservative rule; `instructions_hash` covers the wording a
+topic's instructions select.
 """
 
 import re
@@ -276,9 +275,8 @@ def instructions_hash(instructions: JudgeInstructions | None) -> str:
             "stage_rules": STAGE_RULE_SETS[found.strictness],
             "guidance_frame": GUIDANCE_FRAME if found.guidance else None,
             "guidance": found.guidance,
-            # Only a team's own wording adds keys, so earlier hashes stay as they were.
-            **({"system_prompt": found.system_prompt} if found.system_prompt else {}),
-            **({"user_template": found.user_template} if found.user_template else {}),
+            "system_prompt": found.system_prompt,
+            "user_template": found.user_template,
         },
         domain="kittum.judge_instructions.v1",
     )

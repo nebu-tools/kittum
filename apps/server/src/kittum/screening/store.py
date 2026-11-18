@@ -1,4 +1,4 @@
-"""Screening rows in Postgres. Reviewer reads go through the SQL functions of the migration,
+"""Screening rows in Postgres. Reviewer reads go through the SQL functions of the schema,
 which return nothing a reviewer may not see; everything else here is for the service itself."""
 
 from typing import TYPE_CHECKING, Any

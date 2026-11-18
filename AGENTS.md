@@ -12,7 +12,7 @@ kittum/
 │   ├── server/                 # Python 3.14, uv: every module below, the API, and the CLI
 │   │   ├── src/kittum/<module>/   # one package per module from DESIGN.md
 │   │   ├── tests/<module>/        # that module's tests
-│   │   └── db/migrations/         # dbmate SQL migrations
+│   │   └── db/migrations/         # the dbmate schema file
 │   └── web/                    # the reviewer workbench (React 19, TanStack Router, Vite+)
 ├── packages/contracts/         # TypeScript client generated from the server's OpenAPI
 ├── infra/compose.yaml          # Postgres 18, dbmate, GROBID
@@ -59,8 +59,10 @@ server.
   change.
 - **HTTP routes** for a module go in `src/kittum/api/routes/<module>.py` as a `router`, registered
   with one line in `api/routes/__init__.py`. Routes take `Context` and stay thin.
-- **Migrations** are new files named `<UTC timestamp>_<module>_<what>.sql` with `migrate:up` and
-  `migrate:down`. A module creates only its own tables and never alters another module's.
+- **The schema** is one dbmate file, `db/migrations/20261118000000_kittum_schema.sql`, with a
+  section per module. A change edits its module's section; a module creates only its own tables
+  and never alters another module's. Stored data is not carried over: rebuild the database with
+  `dbmate drop` and `dbmate up`.
 - Values that cross modules are `kittum.core.Record`s: frozen, unknown fields rejected.
 - IDs come from `kittum.core.new_id()` (UUIDv7). Time comes from a `Clock`, never `datetime.now()`.
 - Decimals stay exact strings with explicit units. Empty is not zero.

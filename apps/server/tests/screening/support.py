@@ -29,6 +29,7 @@ from kittum.judge import (
     applicable,
     build_request,
     judge_many,
+    register_config,
 )
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
@@ -73,6 +74,13 @@ CONFIG = JudgeConfig(
     id="nrt-ta-qwen-v1", model_id="qwen3.8-27b-bf16", prompt_version=PROMPT_VERSION
 )
 RECIPE = ModelRegistry.load().get(CONFIG.model_id)
+
+
+def register_judge(tx: Tx, config: JudgeConfig = CONFIG) -> None:
+    """Register the stage's judge config, as `kittum.app.open_screening` does with a stage."""
+    register_config(tx, config, RECIPE, SystemClock())
+
+
 START = datetime(2026, 10, 29, 9, 0, tzinfo=UTC)
 JUDGE_MARK = "(judge)"  # every recorded rationale ends with it, so tests can find AI output
 
@@ -526,6 +534,7 @@ class World:
         """Open the stage, enqueue the judge jobs, and run them."""
         records = self.records if records is None else records
         with self.db.transaction() as tx:
+            register_judge(tx)
             info = self.screening.open_stage(
                 tx,
                 command_id=new_id(),

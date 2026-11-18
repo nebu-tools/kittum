@@ -19,7 +19,7 @@ SENTINELS = PROTOCOL.parents[1] / "sentinels" / "nicotine-replacement.yaml"
 
 
 def test_a_lead_sets_up_screening_from_the_command_line(
-    database: Database,  # noqa: ARG001 - skips without Postgres
+    empty_database: Database,  # noqa: ARG001 - KITTUM_DATABASE_URL points at it
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

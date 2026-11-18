@@ -54,8 +54,8 @@ export interface Topic {
   readonly scopes: ReadonlyArray<Scope>;
   readonly criteria: ReadonlyArray<Criterion>;
   readonly source_plan: { readonly sources: ReadonlyArray<Source> };
-  /** The AI judge's strictness, the team's guidance, and the team's own prompt wording, if any;
-   * left out while all are the default. */
+  /** The AI judge's strictness, the team's guidance, and the team's own prompt wording. A
+   * compiled document holds all four; the form leaves the object out while all are the default. */
   readonly judge?: {
     readonly strictness?: string;
     readonly guidance?: string | null;

@@ -33,7 +33,7 @@ from kittum.gateway import (
     default_policies,
     user_agent,
 )
-from kittum.judge import JUDGE_V2, PROMPT_VERSION, JudgeConfig, judge_many, load_config
+from kittum.judge import PROMPT_VERSION, JudgeConfig, judge_many, load_config
 from kittum.ledger import PostgresLedger
 from kittum.models import (
     REPLAY_PREFIX,
@@ -144,7 +144,7 @@ def judge_config(
 
 JUDGE_PROMPT_ROLE = "judge_prompt"
 """The recordings' note of the prompt version the live judge sent (`LlmRecordings.set_role`). A
-recording without it predates `judge.v3`, so it holds `judge.v2` requests."""
+replay refuses recordings without it."""
 
 
 RECORDING_SECRET_LENGTH = 12
@@ -279,7 +279,13 @@ def build_judge(
     if settings.llm_replay:
         # Replayed answers are keyed by the exact request, so the replay sends the prompt version
         # the live run sent.
-        version = LlmRecordings(settings.llm_replay).role(JUDGE_PROMPT_ROLE) or JUDGE_V2
+        recorded = LlmRecordings(settings.llm_replay).role(JUDGE_PROMPT_ROLE)
+        if recorded is None:
+            raise ConfigurationError(
+                f"KITTUM_LLM_REPLAY: {settings.llm_replay} does not say which judge prompt version"
+                " the live run sent; record it again"
+            )
+        version = recorded
     if settings.llm_record:
         LlmRecordings(settings.llm_record).set_role("judge", recipe_id)
         LlmRecordings(settings.llm_record).set_role(JUDGE_PROMPT_ROLE, version)

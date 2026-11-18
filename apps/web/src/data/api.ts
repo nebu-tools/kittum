@@ -148,8 +148,20 @@ const anchorView = (a: KittumApi.Anchor) => ({
 
 type Localized = { readonly [language: string]: string };
 
+/** Throws an invalid-response `WorkbenchError` when the server names no documentation level for
+ * a topic. */
 const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => {
   const protocol = published.stored.version.protocol;
+  const documentation = (topicId: string) => {
+    const level = published.documentation[topicId];
+    if (level === undefined) {
+      throw new WorkbenchError({
+        reason: "invalid",
+        message: `The server sent no documentation level for topic ${topicId}.`,
+      });
+    }
+    return level;
+  };
   const lang = protocol.default_language;
   const text = (t: Localized | null | undefined) =>
     t ? (t[lang] ?? t["en"] ?? Object.values(t)[0] ?? "") : "";
@@ -179,8 +191,7 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
           id: topic.id,
           label: text(topic.label),
           mode: topic.mode,
-          documentation:
-            published.documentation[topic.id] ?? (topic.mode === "S" ? "working" : "complete"),
+          documentation: documentation(topic.id),
           mode_rationale: topic.mode_rationale ? text(topic.mode_rationale) : null,
           scopes,
           sentinel_percent: topic.audit?.sentinel_percent ?? "0",
@@ -194,9 +205,7 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
             text_original: text(c.text),
             language: lang,
             short_label: c.short_label ?? null,
-            // Read loosely: the field is optional in the protocol and older contracts lack it.
-            exclusion_reason:
-              (c as { readonly exclusion_reason?: string | null }).exclusion_reason ?? null,
+            exclusion_reason: c.exclusion_reason ?? null,
             decidable_at: c.decidable_at,
             // A criterion for the whole topic applies to each of its scopes.
             applies_to: c.applies_to.flatMap((a) =>
@@ -219,7 +228,17 @@ export const makeApiWorkbench = (): Workbench => ({
 
   protocol: (projectId) =>
     orNull(call((api) => api.getPublishedProtocol(projectId, undefined))).pipe(
-      Effect.map((p) => (p ? toProtocol(p) : null)),
+      Effect.flatMap((p) =>
+        p
+          ? Effect.try({
+              try: () => toProtocol(p),
+              catch: (e) =>
+                e instanceof WorkbenchError
+                  ? e
+                  : new WorkbenchError({ reason: "invalid", message: String(e) }),
+            })
+          : Effect.succeed(null),
+      ),
     ),
 
   createProject: ({ name, leadName }) =>

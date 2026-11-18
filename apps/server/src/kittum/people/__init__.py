@@ -1,6 +1,6 @@
 """Who works on a project, and in which roles: lead, reviewer, auditor, adjudicator.
 
-The table `project_member` (migration `20261029040000_app_projects.sql`) holds one row per
+The table `project_member` (`db/migrations/20261118000000_kittum_schema.sql`) holds one row per
 person and role. Screening stages take their screeners, auditor, and adjudicators from it, and
 `is_lead` decides who may see the whole review: every record, a stage's agreement and audit
 figures, the reports. Until the API has authentication, the person comes from its identity

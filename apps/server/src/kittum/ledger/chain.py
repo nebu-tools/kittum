@@ -5,8 +5,8 @@
                        project_id, seq, event_id, type, schema_version, actor_id,
                        recorded_at, payload_hash, prev_hash }))
 
-The first event of a project chains to GENESIS_HASH. Changing anything here breaks every existing
-chain, so a change needs a new domain tag and a migration plan.
+The first event of a project chains to GENESIS_HASH. Changing anything here changes every event
+hash, so chains written before the change no longer verify.
 """
 
 from datetime import UTC, datetime

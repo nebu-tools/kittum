@@ -65,6 +65,7 @@ from tests.screening.support import (
     answer,
     central_import,
     pubmed_search,
+    register_judge,
     timing,
 )
 
@@ -220,6 +221,7 @@ class ReviewWorld:
         """Open the stage, run the judge on recorded completions, and keep the stage."""
         criteria = self.criteria(stage)
         with self.db.transaction() as tx:
+            register_judge(tx, self.config)
             info = self.screening.open_stage(
                 tx,
                 command_id=new_id(),

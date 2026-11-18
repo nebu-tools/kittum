@@ -284,7 +284,8 @@ def test_a_recorded_live_run_replays_offline_to_the_same_rows_and_ledger(
 def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path) -> None:
     """Two models answered in the live run and the second judged. The replay, told nothing about
     the judge, must pick the second too, not whichever the recordings happen to list first; and a
-    recording that does not say which one judged is refused rather than guessed."""
+    recording that does not say which one judged, or which prompt version it sent, is refused
+    rather than guessed."""
     path = tmp_path / "models"
     recipes = ("qwen3.8-27b-bf16", "gemma-4-31b-it-bf16")
     live = Settings(
@@ -319,6 +320,12 @@ def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path
     assert set(replays) == {first, judged}
     replayed = build_judge(replay, registry, replays)
     assert replayed is not None and replayed.recipe.id == judged
+
+    meta = json.loads((path / "meta.json").read_text())
+    del meta["roles"]["judge_prompt"]
+    (path / "meta.json").write_text(json.dumps(meta))
+    with pytest.raises(ConfigurationError, match="which judge prompt version"):
+        build_judge(replay, registry, replays)
 
     (path / "meta.json").unlink()
     with pytest.raises(ConfigurationError, match="does not say which recipe judged"):

@@ -7,7 +7,6 @@ from psycopg.types.json import Jsonb
 
 from kittum.core import KittumError, canonical_json, content_hash, new_id
 from kittum.judge.prompt import (
-    PROMPT_VERSION,
     build_request,
     check_version,
     prompt_template_hash,
@@ -39,18 +38,14 @@ class JudgeConfigConflict(KittumError):
 
 
 def decoding(config: JudgeConfig, recipe: ModelRecipe) -> dict[str, Any]:
-    found: dict[str, Any] = {
+    return {
         "temperature": config.temperature,
         "seed": config.seed,
         "max_tokens": config.max_tokens,
         "max_attempts": config.max_attempts,
         "extra_body": recipe.extra_body,
+        "reasoning_tokens": recipe.reasoning_tokens,  # added to max_tokens in the request body
     }
-    if recipe.reasoning_tokens:
-        # Added to max_tokens in the request body. Only when set, so the configs and cache keys
-        # of recipes without it stay as they were.
-        found["reasoning_tokens"] = recipe.reasoning_tokens
-    return found
 
 
 def _check_recipe(config: JudgeConfig, recipe: ModelRecipe) -> None:
@@ -58,12 +53,9 @@ def _check_recipe(config: JudgeConfig, recipe: ModelRecipe) -> None:
         raise ValueError(f"judge config {config.id} uses {config.model_id}, not {recipe.id}")
 
 
-def register_config(tx: Tx, config: JudgeConfig, recipe: ModelRecipe, clock: Clock) -> None:
-    """Record a judge config once, with the templates of its prompt version. Reusing its ID for
-    anything else raises."""
-    _check_recipe(config, recipe)
+def _registered(config: JudgeConfig, recipe: ModelRecipe) -> dict[str, Any]:
     version = check_version(config.prompt_version)
-    values = {
+    return {
         "model_recipe_id": recipe.id,
         "weights_hash": weights_hash(recipe),
         "prompt_version": version,
@@ -71,6 +63,14 @@ def register_config(tx: Tx, config: JudgeConfig, recipe: ModelRecipe, clock: Clo
         "schema_hash": schema_template_hash(version),
         "decoding": decoding(config, recipe),
     }
+
+
+def register_config(tx: Tx, config: JudgeConfig, recipe: ModelRecipe, clock: Clock) -> None:
+    """Record a judge config once, with the templates of its prompt version. Reusing its ID for
+    anything else raises. A screening stage names a registered config, so whoever opens a stage
+    registers its config in the same transaction."""
+    _check_recipe(config, recipe)
+    values = _registered(config, recipe)
     tx.execute(
         "insert into judge_config (id, model_recipe_id, model_recipe, weights_hash,"
         " prompt_version, prompt_hash, schema_hash, decoding, created_at)"
@@ -87,12 +87,22 @@ def register_config(tx: Tx, config: JudgeConfig, recipe: ModelRecipe, clock: Clo
             clock.now(),
         ),
     )
+    check_config(tx, config, recipe)
+
+
+def check_config(tx: Tx, config: JudgeConfig, recipe: ModelRecipe) -> None:
+    """Raise `JudgeConfigConflict` unless `config` is registered with this recipe, its prompt
+    version's templates, and its decoding: a judge never records a verdict under a config that
+    says something else than what it sent."""
+    _check_recipe(config, recipe)
+    values = _registered(config, recipe)
     row = tx.execute(
         "select model_recipe_id, weights_hash, prompt_version, prompt_hash, schema_hash, decoding"
         " from judge_config where id = %s",
         (config.id,),
     ).fetchone()
-    assert row is not None
+    if row is None:
+        raise JudgeConfigConflict(f"judge config {config.id} is not registered")
     changed = sorted(k for k, v in values.items() if row[k] != v)
     if changed:
         raise JudgeConfigConflict(
@@ -121,17 +131,12 @@ def load_config(tx: Tx, config_id: str) -> JudgeConfig | None:
 
 
 def config_prompt_version(tx: Tx, config_id: str) -> str:
-    """The prompt version a judge config renders with: the registered one, else the version a
-    `<label>@<version>` ID names (configs are registered when they first judge), else the version
-    new configs use."""
+    """The prompt version a registered judge config renders with. Every stage names a registered
+    config, so an unknown ID raises `KeyError`."""
     found = load_config(tx, config_id)
-    if found is not None:
-        return found.prompt_version
-    _, _, named = config_id.rpartition("@")
-    try:
-        return check_version(named)
-    except ValueError:
-        return PROMPT_VERSION
+    if found is None:
+        raise KeyError(f"judge config {config_id} is not registered")
+    return found.prompt_version
 
 
 def cache_key(
@@ -318,8 +323,7 @@ def judge_many(
     `instructions` are the topic's strictness and guidance (`kittum.protocol.JudgeInstructions`);
     `numbers` the criteria's permanent numbers in the topic, by ID, for the prompt's headings.
     """
-    _check_recipe(config, recipe)
-    register_config(tx, config, recipe, clock)
+    check_config(tx, config, recipe)
     keys = [
         cache_key(i, scope_id, criteria, config, recipe, protocol_hash, instructions, numbers)
         for i in items
