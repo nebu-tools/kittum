@@ -39,18 +39,14 @@ class JudgeConfigConflict(KittumError):
 
 
 def decoding(config: JudgeConfig, recipe: ModelRecipe) -> dict[str, Any]:
-    found: dict[str, Any] = {
+    return {
         "temperature": config.temperature,
         "seed": config.seed,
         "max_tokens": config.max_tokens,
         "max_attempts": config.max_attempts,
         "extra_body": recipe.extra_body,
+        "reasoning_tokens": recipe.reasoning_tokens,  # added to max_tokens in the request body
     }
-    if recipe.reasoning_tokens:
-        # Added to max_tokens in the request body. Only when set, so the configs and cache keys
-        # of recipes without it stay as they were.
-        found["reasoning_tokens"] = recipe.reasoning_tokens
-    return found
 
 
 def _check_recipe(config: JudgeConfig, recipe: ModelRecipe) -> None:
