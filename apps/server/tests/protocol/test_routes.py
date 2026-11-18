@@ -10,7 +10,6 @@ from kittum.api import AppContext, create_app
 from kittum.core import new_id
 from kittum.db import Database
 from kittum.ledger import PostgresLedger
-from kittum.profiles import load_profiles
 from kittum.protocol import PUBLISHED_EVENT, compile
 from kittum.settings import Settings
 from kittum.storage import FilesystemStore
@@ -20,11 +19,10 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
-AMNOG = "capivasertib"
+GERMAN = "tranexamic-acid"  # written in German, with two topics, one of them in mode M2
 
 
 def _hash(name: str) -> str:
-    load_profiles()
     return compile(example_text(name)).content_hash
 
 
@@ -130,7 +128,7 @@ def test_a_europe_pmc_strategy_is_checked_like_a_pubmed_one() -> None:
 
 def test_validate_reports_the_hash_or_the_issues() -> None:
     client = TestClient(create_app())
-    for name in (AMNOG, "nicotine-replacement"):
+    for name in (GERMAN, "nicotine-replacement"):
         ok = client.post("/api/protocol/validate", json=example_source(name))
         assert ok.status_code == 200
         assert ok.json() == {
@@ -141,14 +139,14 @@ def test_validate_reports_the_hash_or_the_issues() -> None:
             "documentation": {t["id"]: "complete" for t in example_source(name)["search_topics"]},
         }
 
-    broken = example_source(AMNOG)
-    broken["search_topics"][0]["freshness"]["max_age_months"] = 6
+    broken = example_source(GERMAN)
+    del broken["search_topics"][1]["validation_pack"]
     report = client.post("/api/protocol/validate", json=broken).json()
     assert report["ok"] is False
     assert report["issues"] == [
         {
-            "path": "search_topics[0].freshness.max_age_months",
-            "message": "Modul 4 allows searches at most 3 months old at submission, got 6",
+            "path": "search_topics[1].validation_pack",
+            "message": "mode M2 needs a validation pack that shows the AI's performance",
         }
     ]
 
@@ -177,12 +175,12 @@ def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, An
     client, ids = api
     base = f"/api/projects/{ids['project']}/protocol-versions"
 
-    created = client.post(base, json=example_source(AMNOG))
+    created = client.post(base, json=example_source(GERMAN))
     assert created.status_code == 201
     draft = created.json()
     assert draft["status"] == "draft"
-    assert draft["version"]["content_hash"] == _hash(AMNOG)
-    assert client.post(base, json=example_source(AMNOG)).json()["id"] == draft["id"]
+    assert draft["version"]["content_hash"] == _hash(GERMAN)
+    assert client.post(base, json=example_source(GERMAN)).json()["id"] == draft["id"]
 
     denied = client.post(f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["system"])})
     assert denied.status_code == 403  # not the project's lead
@@ -205,9 +203,9 @@ def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, An
     fetched = client.get(f"{base}/{draft['id']}").json()
     assert fetched == body
     protocol = fetched["version"]["protocol"]
-    assert protocol["profile"] == "gba_amnog"
+    assert (protocol["default_language"], protocol["profile"]) == ("de", None)
     assert [q["id"] for q in protocol["questions"]] == ["a1", "a2", "b1", "b2"]
-    assert protocol["questions"][2]["extensions"]["zvt"]["nach_aerztlicher_massgabe"] is True
+    assert [t["mode"] for t in protocol["search_topics"]] == ["M1", "M2"]
     assert client.get(f"{base}/{new_id()}").status_code == 404
 
     with psycopg.connect(ids["url"], row_factory=dict_row) as conn:
@@ -223,14 +221,14 @@ def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, An
 @pytest.mark.postgres
 def test_api_rejects_an_invalid_draft(api: tuple[TestClient, dict[str, Any]]) -> None:
     client, ids = api
-    broken = example_source(AMNOG)
-    broken["questions"][0]["comparators"] = []
+    broken = example_source(GERMAN)
+    broken["search_topics"][1]["scopes"].append("zz")
     response = client.post(f"/api/projects/{ids['project']}/protocol-versions", json=broken)
     assert response.status_code == 422
     (issue,) = response.json()["detail"]["issues"]
     assert issue == {
-        "path": "questions[0].comparators",
-        "message": "the zVT options are the comparators; list at least one",
+        "path": "search_topics[1].scopes[2]",
+        "message": "unknown scope 'zz'; a topic covers review questions (a1, a2, b1, b2)",
     }
     assert client.get(f"/api/projects/{ids['project']}/protocol-versions").json() == []
 

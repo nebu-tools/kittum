@@ -1,6 +1,6 @@
 """`kittum demo seed`: a complete review project to explore, demo, and test end to end.
 
-The nicotine replacement example protocol (no profile), three searches replayed from recordings
+The nicotine replacement example protocol, three searches replayed from recordings
 (PubMed, an example CENTRAL export, and a citation search), the corpus, two CC BY trial PDFs as
 full texts, and an open title and abstract stage with the AI judge's readings. Nothing calls the
 network. The judge runs on a live model server (`--live`) or replays recorded answers

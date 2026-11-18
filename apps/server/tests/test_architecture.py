@@ -18,7 +18,6 @@ ALLOWED: dict[str, set[str]] = {
     "people": {"core", "db"},
     "runs": {"core", "db", "ledger"},
     "protocol": {"core", "db", "ledger"},
-    "profiles": {"core", "protocol", "report"},
     "gateway": {"core", "db", "storage"},
     "models": {"core", "gateway"},
     "stats": {"core"},

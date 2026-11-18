@@ -8,6 +8,7 @@ Run once, by hand, with a hosted or local model configured as a deployment confi
 It answers from the recordings where it has one and asks the model only for new requests; with
 `--replay` it asks no model and records only the counts; `--no-counts` skips the counts.
 It drafts the protocol from `DESCRIPTION`, improves the example's PubMed strategy and the draft's,
+improves question b1 of the tranexamic acid example on a test profile,
 and counts every strategy the tests count on PubMed and ClinicalTrials.gov. The answers go to
 `kittum/app/demo_data/assist/answers.json`, keyed by request (no key, no address); the counts to
 `fixtures/counts`, which the e2e stack's recordings point at. This is not a test.
@@ -33,14 +34,12 @@ from kittum.models import (
     backends_from_endpoints,
     request_key,
 )
-from kittum.profiles import load_profiles
 from kittum.protocol import compile, strategy_dialect
 from kittum.search import count_hits
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.assist.support import (
     ANSWERS,
-    CAPIVASERTIB,
     CONTACT_EMAIL,
     COUNTS,
     DESCRIPTION,
@@ -50,6 +49,7 @@ from tests.assist.support import (
     STACK,
     accepted_subset,
     drafted_pubmed,
+    licensing_source,
 )
 from tests.enrich.record_fixtures import RecordingTransport
 
@@ -87,7 +87,6 @@ def _strategies(document: dict[str, Any]) -> list[tuple[str, str]]:
 
 
 def main(recipe_id: str, *, replay: bool = False, counts: bool = True) -> None:
-    load_profiles()
     settings = Settings.from_env()
     store = MemoryStore()
     recorded_id, recorded = recorded_backend(store)
@@ -115,10 +114,8 @@ def main(recipe_id: str, *, replay: bool = False, counts: bool = True) -> None:
             )
         print(f"{part}: {[c.rationale for c in changes]}")
 
-    capivasertib = compile(yaml.safe_load(CAPIVASERTIB.read_text())).protocol.model_dump(
-        mode="json"
-    )
-    question = assist.improve(backend, recipe_id, new_id(), capivasertib, QUESTION)
+    on_profile = compile(licensing_source()).protocol.model_dump(mode="json")
+    question = assist.improve(backend, recipe_id, new_id(), on_profile, QUESTION)
     assert question.suggestion, question.issues
     print(f"{QUESTION}: {[(c.field, c.rationale) for c in question.suggestion.changes]}")
     print(f"draft: {len(drafted.model.attempts)} attempts")

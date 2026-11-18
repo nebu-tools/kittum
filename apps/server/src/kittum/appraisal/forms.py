@@ -4,7 +4,7 @@ A question applies always, or only when earlier answers meet its condition ("If 
 2.2"). A question whose condition fails is not applicable (NA): nobody types NA, Kittum shows it.
 A domain's proposed judgement comes from its algorithm once every applicable question has an
 answer; the overall proposal comes from the domain judgements. Algorithms are code, registered
-per instrument; a form without one (a profile's) gets its judgements from the reviewer only.
+per instrument; a form without one gets its judgements from the reviewer only.
 """
 
 from typing import TYPE_CHECKING, Literal, get_args

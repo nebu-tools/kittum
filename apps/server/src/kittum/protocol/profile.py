@@ -2,8 +2,11 @@
 
 A profile names its vocabularies (outcome categories, topic kinds), the schemas of its
 `extensions`, extra validation rules, and its own labels for core concepts. The protocol selects
-one with `profile: <id>`. Core validation calls into the profile; core never imports one. Entry
-points register the built-in profiles (`kittum.profiles.load_profiles()`).
+one with `profile: <id>`. Core validation calls into the profile; core never imports one.
+
+Kittum ships no profile. A deployment that needs one registers it with `register_profile` before
+it compiles or loads a protocol that names it. The `profile` and `extensions` fields stay in
+every protocol, empty by default, because they are part of the hashed protocol document.
 """
 
 from collections.abc import Callable, Mapping

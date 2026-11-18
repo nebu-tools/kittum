@@ -3,9 +3,7 @@
 Forms are data: domains, signalling questions with their answer options and conditions, and
 words that point at the passages each question is about. The core instrument is RoB 2 for
 randomized trials (`kittum.appraisal.rob2`), with its published algorithms for the suggested
-domain judgements and the overall rule. Profiles add their own forms with `register_instrument`
-under IDs of the form `<profile id>.<name>`; a form without algorithms gets every judgement from
-the reviewer.
+domain judgements and the overall rule.
 
 A named human answers every question. An appraisal is of one result of one report, on the
 report's full text: each answer carries quotes as anchors on that document, and Kittum checks
@@ -70,22 +68,8 @@ CORE_INSTRUMENTS: tuple[CoreInstrument, ...] = get_args(CoreInstrument.__value__
 register(Instrument(definition=ROB2, algorithms=ROB2_ALGORITHMS, overall=worst))
 
 
-def register_instrument(
-    definition: InstrumentDefinition,
-    algorithms: dict[str, DomainAlgorithm] | None = None,
-    overall: OverallRule | None = None,
-) -> None:
-    """Add a profile's instrument. Called from the entry points, once per process."""
-    profile, dot, name = definition.id.partition(".")
-    if not (profile and dot and name):
-        raise ValueError(
-            f"profile instruments are named '<profile id>.<name>', got {definition.id!r}"
-        )
-    register(Instrument(definition=definition, algorithms=algorithms or {}, overall=overall))
-
-
 def instruments() -> tuple[str, ...]:
-    """The core instruments, then the profiles', by ID."""
+    """The core instruments, then any others registered, by ID."""
     return (*CORE_INSTRUMENTS, *sorted(i for i in registered() if i not in CORE_INSTRUMENTS))
 
 
@@ -123,6 +107,5 @@ __all__ = [
     "mentions",
     "override",
     "propose",
-    "register_instrument",
     "start",
 ]

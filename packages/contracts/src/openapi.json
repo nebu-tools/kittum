@@ -11577,14 +11577,6 @@
             "title": "Id",
             "type": "string"
           },
-          "kind": {
-            "enum": [
-              "core",
-              "profile"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
           "renderable": {
             "title": "Renderable",
             "type": "boolean"
@@ -11592,7 +11584,6 @@
         },
         "required": [
           "id",
-          "kind",
           "renderable"
         ],
         "title": "TargetInfo",
@@ -17043,7 +17034,7 @@
     },
     "/api/projects/{project_id}/reports/targets": {
       "get": {
-        "description": "The core targets, and the targets of the profile the published protocol names.",
+        "description": "The targets every project can render, and the bundle, which is sealed instead.",
         "operationId": "listReportTargets",
         "parameters": [
           {

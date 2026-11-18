@@ -15,7 +15,7 @@ the screeners, that becomes a conflict like any other.
 Mode S has neither: one screener per record, and when that screener asks for a second opinion,
 the second screener's standing decision is the record's outcome.
 
-Profiles render from a `Review` too; they never query the database themselves.
+Renderers read only the `Review`; they never query the database themselves.
 """
 
 from collections import defaultdict
@@ -430,8 +430,8 @@ class Review(Record):
 
 
 class ReportRequestError(KittumError, ValueError):
-    """The request cannot be answered as asked: an unknown target, the bundle asked to render, a
-    profile target for a review without that profile, or a cutoff outside the ledger. The
+    """The request cannot be answered as asked: an unknown target, the bundle asked to render, or
+    a cutoff outside the ledger. The
     caller's mistake, unlike a fault of the server."""
 
 

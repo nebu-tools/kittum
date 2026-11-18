@@ -76,7 +76,6 @@ def test_the_bundle_verifies_offline_and_carries_every_report(
             assert (sealed.path / "reports" / target / f.path).read_bytes() == f.data
     manifest = json.loads((sealed.path / "manifest.json").read_text())
     assert FLOW in manifest["files"]
-    assert not any(p.startswith("reports/dossier/") for p in manifest["files"])  # no profile
 
     # Every module's rows are there, as of the cutoff.
     db = _db(sealed)

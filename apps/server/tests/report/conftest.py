@@ -9,7 +9,7 @@ import pytest
 
 from kittum.db import Database
 from tests.extraction.conftest import env  # noqa: F401 - extraction's project, for test_extracted
-from tests.report.support import capivasertib_review, nrt_review
+from tests.report.support import nrt_review, tranexamic_review
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -35,5 +35,5 @@ def nrt(database: Database) -> tuple[ReviewWorld, NrtSeqs]:
 
 
 @pytest.fixture(scope="module")
-def capivasertib(database: Database) -> ReviewWorld:
-    return capivasertib_review(database)
+def tranexamic(database: Database) -> ReviewWorld:
+    return tranexamic_review(database)

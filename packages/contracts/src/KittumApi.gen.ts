@@ -217,8 +217,8 @@ export type SourceText = { readonly "text": string }
 export const SourceText = Schema.Struct({ "text": Schema.String.annotate({ "title": "Text" }) }).annotate({ "title": "SourceText", "identifier": "SourceText" })
 export type SealedBundle = { readonly "cutoff_seq": number, readonly "key_id": string, readonly "manifest_hash": string, readonly "path": string }
 export const SealedBundle = Schema.Struct({ "cutoff_seq": Schema.Number.annotate({ "title": "Cutoff Seq" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "key_id": Schema.String.annotate({ "title": "Key Id" }), "manifest_hash": Schema.String.annotate({ "title": "Manifest Hash" }), "path": Schema.String.annotate({ "title": "Path" }) }).annotate({ "title": "SealedBundle", "identifier": "SealedBundle" })
-export type TargetInfo = { readonly "id": string, readonly "kind": "core" | "profile", readonly "renderable": boolean }
-export const TargetInfo = Schema.Struct({ "id": Schema.String.annotate({ "title": "Id" }), "kind": Schema.Literals(["core", "profile"]).annotate({ "title": "Kind" }), "renderable": Schema.Boolean.annotate({ "title": "Renderable" }) }).annotate({ "title": "TargetInfo", "identifier": "TargetInfo" })
+export type TargetInfo = { readonly "id": string, readonly "renderable": boolean }
+export const TargetInfo = Schema.Struct({ "id": Schema.String.annotate({ "title": "Id" }), "renderable": Schema.Boolean.annotate({ "title": "Renderable" }) }).annotate({ "title": "TargetInfo", "identifier": "TargetInfo" })
 export type Target = string
 export const Target = Schema.String.annotate({ "identifier": "Target" })
 export type ExportView = { readonly "columns": ReadonlyArray<string>, readonly "description"?: string | null, readonly "refs": ReadonlyArray<string> }
@@ -3266,7 +3266,7 @@ readonly "sealReportBundle": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SealReportBundleRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SealReportBundle200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SealReportBundle422", SealReportBundle422>>;
   }
   /**
-* The core targets, and the targets of the profile the published protocol names.
+* The targets every project can render, and the bundle, which is sealed instead.
 */
 readonly "listReportTargets": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<ListReportTargets200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListReportTargets422", ListReportTargets422>>;

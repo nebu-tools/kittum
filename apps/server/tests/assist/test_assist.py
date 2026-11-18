@@ -55,15 +55,16 @@ from kittum.settings import LlmEndpoint, Settings
 from kittum.storage import FilesystemStore, MemoryStore
 from tests.assist.support import (
     ANSWERS,
-    CAPIVASERTIB,
     CONTACT_EMAIL,
     COUNTS,
     DESCRIPTION,
     EXAMPLE,
     MISTYPED,
+    OFF_LABEL,
     PUBMED,
     QUESTION,
     accepted_subset,
+    licensing_source,
 )
 from tests.documents.conftest import savepoint_db
 from tests.models.streaming import StreamingServer, chunks
@@ -504,18 +505,16 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
 
     # A question improved in a profile's protocol: the model rewrites the comparators, and the
     # profile's extensions on them (off-label use) survive, though the model never saw them.
-    capivasertib = save(
-        json.loads(json.dumps(yaml.safe_load(CAPIVASERTIB.read_text()), default=str))
-    )
+    on_profile = save(licensing_source())
     off_label = {
         c["id"]
-        for c in value_at(capivasertib["document"], QUESTION)["comparators"]
+        for c in value_at(on_profile["document"], QUESTION)["comparators"]
         if c["extensions"]["off_label"]
     }
-    assert off_label == {"letrozol", "exemestan", "fulvestrant"}
+    assert off_label == OFF_LABEL
     question = ok(
         client.post(
-            f"{url}/revisions/{capivasertib['id']}/improve", json={"part": QUESTION}, headers=lead
+            f"{url}/revisions/{on_profile['id']}/improve", json={"part": QUESTION}, headers=lead
         )
     )["revision"]
     (rewritten,) = question["suggestion"]["changes"]

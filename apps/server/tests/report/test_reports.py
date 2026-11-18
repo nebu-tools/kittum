@@ -23,13 +23,13 @@ from kittum.report.renderers import exclusion_reasons, registry_records
 from kittum.screening import Decision
 from kittum.search import SearchPlan, import_file
 from tests.report.support import (
-    CAPI_SCOPE,
-    CAPI_TITLES,
     EXAMPLES,
     FIXTURES,
     NRT_SCOPE,
     NRT_TITLES,
     RECIPE,
+    TXA_SCOPE,
+    TXA_TITLES,
     build,
     seed_people,
 )
@@ -499,16 +499,16 @@ def test_identification_comes_from_the_frozen_revision_when_a_search_follows_it(
 
 
 def test_each_topic_flow_identifies_its_own_searches_and_together_they_cover_the_revision(
-    capivasertib: ReviewWorld,
+    tranexamic: ReviewWorld,
 ) -> None:
     """Two searched topics: the RCT searches, and the indirect comparison's bridge search, which
-    finds CAPItello-291 and FAKTION again. Each flow stands alone, as PRISMA reports one per
+    finds HARBOUR and ESTUARY again. Each flow stands alone, as PRISMA reports one per
     question, so both reports are identified and unique in both."""
-    world = capivasertib
+    world = tranexamic
     review = review_at(world)
-    rct, ic = flow(review, "RCT", CAPI_SCOPE), flow(review, "IC", CAPI_SCOPE)
-    turner = world.record(CAPI_TITLES["turner"]).item_ref
-    jones = world.record(CAPI_TITLES["jones"]).item_ref
+    rct, ic = flow(review, "RCT", TXA_SCOPE), flow(review, "IC", TXA_SCOPE)
+    harbour = world.record(TXA_TITLES["harbour"]).item_ref
+    estuary = world.record(TXA_TITLES["estuary"]).item_ref
 
     # By hand: RCT has 5 MEDLINE, 2 CENTRAL, and 3 CTIS records, two of them CENTRAL repeats of
     # MEDLINE; IC has the 2 CENTRAL records, both reports RCT found too.
@@ -520,9 +520,9 @@ def test_each_topic_flow_identifies_its_own_searches_and_together_they_cover_the
     assert (ic.records_identified, ic.duplicates_removed, ic.members["unique_records"]) == (
         2,
         0,
-        tuple(sorted((turner, jones))),
+        tuple(sorted((harbour, estuary))),
     )
-    assert {turner, jones} <= set(rct.members["unique_records"])
+    assert {harbour, estuary} <= set(rct.members["unique_records"])
 
     # Each topic identifies exactly its own searches' occurrences in the revision.
     with world.db.transaction() as tx:
@@ -681,10 +681,10 @@ FROM_STATUS: dict[str, Callable[[Any], Any]] = {
 
 @pytest.mark.parametrize("metric", sorted(METRICS))
 def test_a_metric_the_report_computes_equals_what_screening_reports(
-    metric: str, nrt: tuple[ReviewWorld, NrtSeqs], capivasertib: ReviewWorld
+    metric: str, nrt: tuple[ReviewWorld, NrtSeqs], tranexamic: ReviewWorld
 ) -> None:
     compared = 0
-    for world in (nrt[0], capivasertib):
+    for world in (nrt[0], tranexamic):
         review = review_at(world)
         with world.db.transaction() as tx:
             for stage in review.stages:
@@ -707,13 +707,13 @@ def test_a_metric_the_report_computes_equals_what_screening_reports(
 
 
 def test_the_flow_tells_registry_records_from_articles_still_without_a_full_text(
-    capivasertib: ReviewWorld,
+    tranexamic: ReviewWorld,
 ) -> None:
     """Before full text opens, every sought report is not retrieved. The figure splits them into
     articles without a full text and trial registry entries by the workbench's rule (no DOI, and a
     registry ID it knows or a registry as the journal), so Retrieval, Progress, and the flow count
     the same reports; the split leaves the PRISMA count as it is."""
-    world = capivasertib
+    world = tranexamic
     with world.db.transaction() as tx:
         opened = tx.execute(
             "select e.seq from screening_stage s join audit_event e on e.event_id ="
@@ -722,20 +722,20 @@ def test_the_flow_tells_registry_records_from_articles_still_without_a_full_text
         ).fetchone()
     assert opened is not None
     review = review_at(world, opened["seq"] - 1)
-    f = flow(review, "RCT", CAPI_SCOPE)
+    f = flow(review, "RCT", TXA_SCOPE)
     assert f.reports_not_retrieved == 4
 
     def lines(drawing: str | bytes) -> list[str | None]:
         return [t.text for t in ET.fromstring(drawing).iter("{http://www.w3.org/2000/svg}text")]
 
-    # CAPItello-291's CTIS entry has no DOI and an EU CT number ("2023-505042-25-00"): a registry
+    # HARBOUR's CTIS entry has no DOI and an EU CT number ("2023-900101-11-00"): a registry
     # record, for the figure as for the workbench's rule, so the box splits the four.
-    files = {r.path: r.data for r in render_files(review, "prisma", CAPI_SCOPE)}
-    shown = lines(files[f"RCT-{CAPI_SCOPE}.svg"])
+    files = {r.path: r.data for r in render_files(review, "prisma", TXA_SCOPE)}
+    shown = lines(files[f"RCT-{TXA_SCOPE}.svg"])
     assert "Reports not retrieved: n = 4" in shown
     assert any("Registry record, no article yet" in (t or "") for t in shown)
-    capitello = world.record(CAPI_TITLES["ctis_capitello"]).item_ref
-    assert capitello in registry_records(review)
+    harbour = world.record(TXA_TITLES["ctis_harbour"]).item_ref
+    assert harbour in registry_records(review)
     # With one registry record among them, the box splits the four.
     at = lines(svg(f, "PRISMA 2020 flow diagram", registry_not_retrieved=1)).index
     assert (

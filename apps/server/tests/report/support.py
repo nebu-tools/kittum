@@ -3,17 +3,18 @@ as third reader, through title and abstract and full text. An auditor screens th
 sample and the blind extra screens of AI-only disagreements; an adjudicator resolves the human
 disagreements.
 
-`nrt_review`: the nicotine replacement example (no profile). The recorded PubMed search, the
+`nrt_review`: the nicotine replacement example, written in English. The recorded PubMed search, the
 CENTRAL export of the screening tests, and an Embase export with two duplicates and a follow-up
 report of a CENTRAL trial; a human confirms every link proposal, so the PRISMA flow has
 duplicates and a study with two reports.
 
-`capivasertib_review`: the capivasertib example under the `gba_amnog` profile. MEDLINE and
-CENTRAL exports and a CTIS registry export for the RCT topic, and a CENTRAL bridge search for the
-indirect comparison (IC) that finds two of the same reports; registry entries are excluded at
-title and abstract, and one report at full text, which Anhang 4-C and 4-D list.
+`tranexamic_review`: the tranexamic acid example, written in German with English translations.
+MEDLINE and CENTRAL exports and a CTIS registry export for the RCT topic, and a CENTRAL bridge
+search for the indirect comparison (IC) that finds two of the same reports; registry entries are
+excluded at title and abstract, and one report at full text.
 
-The judge runs on recorded completions keyed by the exact request. Every decision goes through
+The judge answers from canned replies built here (`unclear`, `ai_answer`), keyed by the exact
+request. Every decision goes through
 `Screening`, so the ledger holds every event a real review would.
 """
 
@@ -40,7 +41,6 @@ from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry, OpenAICompatibleBackend
 from kittum.models.testing import RecordedBackend
 from kittum.people import record_roles
-from kittum.profiles import load_profiles
 from kittum.protocol import compile, publish, save_draft
 from kittum.runs import PostgresJobQueue, Worker
 from kittum.screening import (
@@ -426,7 +426,6 @@ def unclear(_: ScreeningRecord, criteria: tuple[Criterion, ...]) -> str:
 def build(
     db: Database, name: str, source: dict[str, Any], *, topic: str, scope: str, config_id: str
 ) -> ReviewWorld:
-    load_profiles()
     ledger = PostgresLedger()
     with db.transaction() as tx:
         people = seed_people(tx, name)
@@ -586,79 +585,79 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     return world, seqs
 
 
-# The capivasertib dossier.
+# The tranexamic acid review.
 
-CAPI_SCOPE = "a1"
-CAPI_TITLES = {
-    "turner": "Capivasertib in Hormone Receptor-Positive",
-    "jones": "Fulvestrant plus capivasertib versus placebo after relapse or progression on an aromatase inhibitor in metastatic, oestrogen receptor-positive breast cancer (FAKTION): a multicentre",
-    "howell": "Fulvestrant plus capivasertib versus placebo after relapse or progression on an aromatase inhibitor in metastatic, oestrogen receptor-positive, HER2-negative",
-    "pakt": "Capivasertib Plus Paclitaxel",
-    "smyth": "Capivasertib, an AKT Kinase Inhibitor",
-    "ctis_capitello": "A Phase III Double-blind Randomised Study",
-    "ctis_tnbc": "A randomised trial of capivasertib plus paclitaxel",
-    "ctis_prostate": "Capivasertib with docetaxel",
+TXA_SCOPE = "a1"
+TXA_TITLES = {
+    "harbour": "Tranexamic acid for the treatment of postpartum haemorrhage (HARBOUR)",
+    "estuary": "Early intravenous tranexamic acid versus placebo in women with postpartum haemorrhage (ESTUARY): a multicentre",
+    "estuary_followup": "Early intravenous tranexamic acid versus placebo in women with postpartum haemorrhage (ESTUARY): mortality",
+    "shoreline": "Topical Tranexamic Acid Applied to the Uterine Incision",
+    "lagoon": "Tranexamic Acid, an Antifibrinolytic",
+    "ctis_harbour": "A Phase III Double-blind Randomised Study",
+    "ctis_gel": "A randomised trial of tranexamic acid gel",
+    "ctis_trauma": "Tranexamic acid with early fibrinogen",
 }
 
 
-CAPI_SENTINELS = (
+TXA_SENTINELS = (
     Sentinel(
         record=ScreeningRecord(
-            item_ref="sentinel:capi-rct",
-            title="Capivasertib plus fulvestrant in AKT pathway-altered advanced breast cancer: a "
-            "randomised, placebo-controlled trial",
-            text="METHODS: Adults with ER-positive, HER2-negative advanced breast cancer that "
-            "progressed after endocrine therapy were randomised to capivasertib plus fulvestrant "
-            "or placebo plus fulvestrant.",
+            item_ref="sentinel:txa-rct",
+            title="Intravenous tranexamic acid in women with postpartum haemorrhage after vaginal "
+            "birth: a randomised, placebo-controlled trial",
+            text="METHODS: Women with a clinical diagnosis of postpartum haemorrhage after vaginal "
+            "birth were randomised to 1 g intravenous tranexamic acid or placebo, in addition to "
+            "usual care.",
         )
     ),
 )
 
 
-def capivasertib_review(db: Database) -> ReviewWorld:
-    source = yaml.safe_load((EXAMPLES / "capivasertib.yaml").read_text())
+def tranexamic_review(db: Database) -> ReviewWorld:
+    source = yaml.safe_load((EXAMPLES / "tranexamic-acid.yaml").read_text())
     world = build(
         db,
-        "Capivasertib Modul 4 A",
+        "Tranexamic acid for postpartum haemorrhage",
         source,
         topic="RCT",
-        scope=CAPI_SCOPE,
-        config_id=f"capi-{new_id()}",
+        scope=TXA_SCOPE,
+        config_id=f"txa-{new_id()}",
     )
-    world.sentinels = CAPI_SENTINELS
+    world.sentinels = TXA_SENTINELS
     with db.transaction() as tx:
         world.import_file(
             tx,
             "medline",
             "PubMed",
-            "#1 capivasertib[tiab] OR AZD5363[tiab]\n#2 fulvestrant[tiab]\n"
+            '#1 "tranexamic acid"[tiab] OR TXA[tiab]\n#2 "postpartum hemorrhage"[tiab]\n'
             "#3 randomized controlled trial[pt] OR randomized[tiab] OR placebo[tiab]\n#4 #1 AND #2 AND #3",
-            FIXTURES / "capivasertib_medline.ris",
+            FIXTURES / "tranexamic_medline.ris",
             "ris",
         )
         world.import_file(
             tx,
             "central",
             "Cochrane Library (Wiley)",
-            "#1 (capivasertib OR AZD5363):ti,ab,kw\n#2 fulvestrant:ti,ab,kw\n#3 #1 AND #2",
-            FIXTURES / "capivasertib_central.ris",
+            '#1 ("tranexamic acid" OR TXA):ti,ab,kw\n#2 "postpartum haemorrhage":ti,ab,kw\n#3 #1 AND #2',
+            FIXTURES / "tranexamic_central.ris",
             "central",
         )
         world.import_file(
             tx,
             "ctis",
             "CTIS public search",
-            "capivasertib",
-            FIXTURES / "capivasertib_ctis.csv",
+            "tranexamic acid",
+            FIXTURES / "tranexamic_ctis.csv",
             "ctis",
         )
-        # The indirect comparison's bridge search finds CAPItello-291 and FAKTION again.
+        # The indirect comparison's bridge search finds HARBOUR and ESTUARY again.
         world.import_file(
             tx,
             "central",
             "Cochrane Library (Wiley)",
-            "#1 fulvestrant:ti,ab,kw\n#2 (randomized OR randomised):ti,ab\n#3 #1 AND #2",
-            FIXTURES / "capivasertib_central.ris",
+            '#1 placebo:ti,ab,kw\n#2 "postpartum haemorrhage":ti,ab,kw\n#3 #1 AND #2',
+            FIXTURES / "tranexamic_central.ris",
             "central",
             topic="IC",
         )
@@ -690,34 +689,36 @@ def capivasertib_review(db: Database) -> ReviewWorld:
     world.open(ta, world.records, unclear)
     a, b = world.people.a, world.people.b
     c = world.criteria(ta)
-    t = CAPI_TITLES
-    for key in ("turner", "jones", "howell", "ctis_capitello"):
+    t = TXA_TITLES
+    for key in ("harbour", "estuary", "estuary_followup", "ctis_harbour"):
         world.decide(a, ta, t[key], include(ta, c))
         world.decide(b, ta, t[key], include(ta, c))
     for who in (a, b):
-        world.decide(who, ta, t["pakt"], exclude(ta, c, "RCT-E2"))
-        world.decide(who, ta, t["ctis_tnbc"], exclude(ta, c, "RCT-E2"))
-        world.decide(who, ta, t["ctis_prostate"], exclude(ta, c, "RCT-E1"))
-    world.decide(a, ta, t["smyth"], exclude(ta, c, "RCT-E5"))
-    world.decide(b, ta, t["smyth"], include(ta, c))
+        world.decide(who, ta, t["shoreline"], exclude(ta, c, "RCT-E2"))
+        world.decide(who, ta, t["ctis_gel"], exclude(ta, c, "RCT-E2"))
+        world.decide(who, ta, t["ctis_trauma"], exclude(ta, c, "RCT-E1"))
+    world.decide(a, ta, t["lagoon"], exclude(ta, c, "RCT-E5"))
+    world.decide(b, ta, t["lagoon"], include(ta, c))
     world.decide_rest(a, ta)
     world.decide_rest(b, ta)
     # The AI read every criterion as unclear, so the auditor screens every double exclusion again
-    # and upholds it; only the Smyth disagreement goes to the adjudicator.
+    # and upholds it; only the single-arm study disagreement goes to the adjudicator.
     world.audit(ta)
     assert world.adjudicate(ta, lambda _: (None, exclude(ta, c, "RCT-E5"))) == 1
 
     ft: Stage = "full_text"
     world.open(
-        ft, [world.record(t[k]) for k in ("turner", "jones", "howell", "ctis_capitello")], unclear
+        ft,
+        [world.record(t[k]) for k in ("harbour", "estuary", "estuary_followup", "ctis_harbour")],
+        unclear,
     )
     c = world.criteria(ft)
-    for key in ("turner", "howell", "ctis_capitello"):
+    for key in ("harbour", "estuary_followup", "ctis_harbour"):
         world.decide(a, ft, t[key], include(ft, c))
         world.decide(b, ft, t[key], include(ft, c))
-    # The 2020 FAKTION report has no results for the PIK3CA/AKT1/PTEN-altered subgroup.
-    world.decide(a, ft, t["jones"], exclude(ft, c, "RCT-E1-ALT"))
-    world.decide(b, ft, t["jones"], exclude(ft, c, "RCT-E1-ALT"))
+    # The 2020 ESTUARY report gives no results by mode of birth.
+    world.decide(a, ft, t["estuary"], exclude(ft, c, "RCT-E1-ALT"))
+    world.decide(b, ft, t["estuary"], exclude(ft, c, "RCT-E1-ALT"))
     world.decide_rest(a, ft)
     world.decide_rest(b, ft)
     world.audit(ft)

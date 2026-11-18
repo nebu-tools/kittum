@@ -1,0 +1,531 @@
+# Tranexamic acid for the treatment and prevention of postpartum haemorrhage. A review written in
+# German with English translations, to show a protocol whose default language is not English.
+#
+# Illustrative. The question follows the public trials of tranexamic acid in obstetric bleeding,
+# such as the WOMAN trial, but the questions, criteria, reference set, and trial names here are
+# Kittum's own and the identifiers in the reference set are invented. Tranexamic acid is a generic
+# medicine on the WHO Model List of Essential Medicines.
+#
+# The file uses most of the schema: four questions that share two search topics, scope-specific
+# criteria, positive and negative examples, keywords, a reference set, a freshness deadline, and a
+# second topic in mode M2 with its rationale and validation pack.
+
+schema_version: 1
+version_label: "1.0"
+default_language: de
+title:
+  de: Tranexamsäure bei postpartaler Blutung
+  en: Tranexamic acid for postpartum haemorrhage
+questions:
+  - id: a1
+    label:
+      de: Behandlung, vaginale Geburt
+      en: Treatment, vaginal birth
+    population:
+      de: Frauen mit klinisch diagnostizierter postpartaler Blutung nach vaginaler Geburt.
+      en: Women with clinically diagnosed postpartum haemorrhage after vaginal birth.
+    intervention:
+      de: Tranexamsäure intravenös zusätzlich zur Standardbehandlung
+      en: Intravenous tranexamic acid in addition to usual care
+    comparators:
+      - id: placebo
+        text:
+          de: Placebo zusätzlich zur Standardbehandlung
+          en: Placebo in addition to usual care
+      - id: usual-care
+        text:
+          de: Standardbehandlung allein
+          en: Usual care alone
+    comparators_are_alternatives: true
+  - id: a2
+    label:
+      de: Behandlung, Kaiserschnitt
+      en: Treatment, caesarean birth
+    population:
+      de: Frauen mit klinisch diagnostizierter postpartaler Blutung nach Kaiserschnitt.
+      en: Women with clinically diagnosed postpartum haemorrhage after caesarean birth.
+    intervention:
+      de: Tranexamsäure intravenös zusätzlich zur Standardbehandlung
+      en: Intravenous tranexamic acid in addition to usual care
+    comparators:
+      - id: placebo
+        text:
+          de: Placebo zusätzlich zur Standardbehandlung
+          en: Placebo in addition to usual care
+    comparators_are_alternatives: true
+  - id: b1
+    label:
+      de: Prophylaxe, vaginale Geburt
+      en: Prevention, vaginal birth
+    population:
+      de: Frauen bei vaginaler Geburt, ohne Blutung zum Zeitpunkt der Randomisierung.
+      en: Women giving birth vaginally, without bleeding at randomization.
+    intervention:
+      de: Tranexamsäure intravenös nach der Geburt des Kindes, zusätzlich zu einem Uterotonikum
+      en: Intravenous tranexamic acid after the birth of the baby, in addition to a uterotonic
+    comparators:
+      - id: placebo
+        text:
+          de: Placebo zusätzlich zu einem Uterotonikum
+      - id: uterotonic-alone
+        text:
+          de: Ein Uterotonikum allein (Oxytocin oder Carbetocin)
+      - id: uterotonic-combination
+        text:
+          de: Eine Kombination von Uterotonika (z. B. Oxytocin mit Misoprostol), nur wenn diese
+            die örtliche Standardprophylaxe ist
+    comparators_are_alternatives: true
+  - id: b2
+    label:
+      de: Prophylaxe, Kaiserschnitt
+      en: Prevention, caesarean birth
+    population:
+      de: Frauen bei geplantem oder ungeplantem Kaiserschnitt, ohne Blutung zum Zeitpunkt der
+        Randomisierung.
+      en: Women having a planned or unplanned caesarean birth, without bleeding at randomization.
+    intervention:
+      de: Tranexamsäure intravenös während des Kaiserschnitts, zusätzlich zu einem Uterotonikum
+      en: Intravenous tranexamic acid during the caesarean, in addition to a uterotonic
+    comparators:
+      - id: placebo
+        text:
+          de: Placebo zusätzlich zu einem Uterotonikum
+          en: Placebo in addition to a uterotonic
+    comparators_are_alternatives: true
+outcomes:
+  - id: bleeding-death
+    category: primary
+    name:
+      de: Tod durch Blutung
+      en: Death due to bleeding
+    definition:
+      de: Tod durch Blutung innerhalb von 42 Tagen nach der Randomisierung.
+      en: Death due to bleeding within 42 days of randomization.
+  - id: hysterectomy
+    category: secondary
+    name:
+      de: Hysterektomie zur Blutstillung
+      en: Hysterectomy to control bleeding
+  - id: transfusion
+    category: secondary
+    name:
+      de: Transfusion von Erythrozytenkonzentraten
+      en: Red cell transfusion
+  - id: thromboembolism
+    category: secondary
+    name:
+      de: Thromboembolische Ereignisse
+      en: Thromboembolic events
+    definition:
+      de: Tiefe Venenthrombose, Lungenembolie, Myokardinfarkt oder Schlaganfall innerhalb von
+        42 Tagen.
+      en: Deep vein thrombosis, pulmonary embolism, myocardial infarction, or stroke within 42 days.
+  - id: sae
+    category: secondary
+    name:
+      de: Schwerwiegende unerwünschte Ereignisse
+      en: Serious adverse events
+effect_modifiers:
+  - id: time-to-treatment
+    label:
+      de: Zeit von der Geburt bis zur Behandlung
+      en: Time from birth to treatment
+    categories:
+      - ≤ 3 Stunden
+      - "> 3 Stunden"
+  - id: anaemia
+    label:
+      de: Anämie vor der Geburt
+      en: Anaemia before birth
+    categories:
+      - ja
+      - nein
+  - id: income
+    label:
+      de: Einkommensniveau des Landes
+      en: Country income level
+    categories:
+      - niedrig oder mittel
+      - hoch
+search_topics:
+  - id: RCT
+    kind: rct_drug
+    label:
+      de: RCTs zu Tranexamsäure gegen Placebo oder Standardbehandlung
+      en: RCTs of tranexamic acid against placebo or usual care
+    mode: M1
+    scopes:
+      - a1
+      - a2
+      - b1
+      - b2
+    audit:
+      sentinel_percent: "1"
+      random_audit_percent: "10"
+      census_of_disagreements: true
+    freshness:
+      max_age_months: 3
+      deadline: 2026-12-01
+    source_plan:
+      limits: Keine Einschränkungen nach Sprache oder Zeitraum in der Suche.
+      sources:
+        - id: medline
+          kind: bibliographic
+          name: MEDLINE
+          platform: PubMed
+          study_filter: Cochrane highly sensitive search strategy for RCTs
+        - id: embase
+          kind: bibliographic
+          name: Embase
+          platform: Ovid
+        - id: central
+          kind: bibliographic
+          name: Cochrane Central Register of Controlled Trials
+          platform: Cochrane Library (Wiley)
+        - id: clinicaltrials_gov
+          kind: registry
+          name: ClinicalTrials.gov
+        - id: eu_ctr
+          kind: registry
+          name: EU Clinical Trials Register
+        - id: ctis
+          kind: registry
+          name: Clinical Trials Information System
+        - id: ictrp
+          kind: registry
+          name: WHO ICTRP Search Portal
+    reference_set:
+      development:
+        - kind: doi
+          value: 10.5555/kittum.example.harbour
+          note: HARBOUR trial, main report (illustrative)
+        - kind: doi
+          value: 10.5555/kittum.example.estuary
+          note: ESTUARY trial, main report (illustrative)
+      validation:
+        - kind: doi
+          value: 10.5555/kittum.example.estuary-followup
+          note: ESTUARY trial, follow-up report (illustrative)
+        - kind: nct
+          value: NCT09900101
+          note: HARBOUR (illustrative)
+        - kind: eudract
+          value: 2019-900101-11
+          note: HARBOUR (illustrative)
+        - kind: euct
+          value: 2023-900101-11-00
+          note: HARBOUR (illustrative)
+        - kind: nct
+          value: NCT09900202
+          note: ESTUARY (illustrative)
+      press:
+        status: planned
+    criteria:
+      - id: RCT-E1
+        slot: population
+        text:
+          de: Frauen, die vaginal oder per Kaiserschnitt entbinden oder nach der Geburt eine
+            postpartale Blutung haben.
+          en: Women giving birth vaginally or by caesarean, or with postpartum haemorrhage after
+            birth.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        positive_examples:
+          - Women with primary postpartum haemorrhage after vaginal or caesarean birth.
+        negative_examples:
+          - Adults with bleeding after major trauma.
+          - Women with heavy menstrual bleeding.
+      - id: RCT-E1-ALT
+        slot: population
+        text:
+          de: Ergebnisse liegen getrennt nach Geburtsmodus vor (vaginale Geburt und Kaiserschnitt).
+          en: Results are reported separately by mode of birth (vaginal and caesarean).
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-VAGINAL
+        slot: population
+        text:
+          de: Ergebnisse liegen für Frauen nach vaginaler Geburt vor.
+          en: Results are reported for women after vaginal birth.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+          - b1
+      - id: RCT-CAESAREAN
+        slot: population
+        text:
+          de: Ergebnisse liegen für Frauen nach Kaiserschnitt vor.
+          en: Results are reported for women after caesarean birth.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+          - b2
+      - id: RCT-TREATMENT
+        slot: population
+        text:
+          de: Die Frauen hatten bei der Randomisierung eine klinisch diagnostizierte postpartale
+            Blutung.
+          en: The women had clinically diagnosed postpartum haemorrhage at randomization.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+          - a2
+      - id: RCT-PREVENTION
+        slot: population
+        text:
+          de: Die Frauen hatten bei der Randomisierung keine Blutung.
+          en: The women had no bleeding at randomization.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b1
+          - b2
+      - id: RCT-E2
+        slot: intervention
+        text:
+          de: Ein Studienarm erhält Tranexamsäure intravenös.
+          en: One arm receives intravenous tranexamic acid.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - tranexamic acid
+          - tranexamsäure
+          - TXA
+        negative_examples:
+          - Topical tranexamic acid applied to the uterine incision.
+      - id: RCT-E3-a1
+        slot: comparator
+        text:
+          de: Der Vergleichsarm erhält Placebo oder die Standardbehandlung allein.
+          en: The control arm receives placebo or usual care alone.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+      - id: RCT-E3-a2
+        slot: comparator
+        text:
+          de: Der Vergleichsarm erhält Placebo.
+          en: The control arm receives placebo.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+      - id: RCT-E3-b1
+        slot: comparator
+        text:
+          de: Der Vergleichsarm erhält Placebo oder die übliche uterotone Prophylaxe allein.
+          en: The control arm receives placebo or the usual uterotonic prophylaxis alone.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b1
+      - id: RCT-E3-b2
+        slot: comparator
+        text:
+          de: Der Vergleichsarm erhält Placebo zusätzlich zu einem Uterotonikum.
+          en: The control arm receives placebo in addition to a uterotonic.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b2
+      - id: RCT-E4
+        slot: outcome
+        text:
+          de: Ergebnisse zu mindestens einem Endpunkt zu Mortalität, Morbidität oder
+            Nebenwirkungen.
+          en: Results for at least one outcome on mortality, morbidity, or adverse effects.
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E5
+        slot: study_type
+        text:
+          de: Randomisierte kontrollierte Studie (RCT).
+          en: Randomized controlled trial.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - single-arm
+          - single arm
+          - non-randomized
+          - non-randomised
+          - retrospective
+          - cohort
+          - case report
+          - review
+          - einarmig
+        positive_examples:
+          - A double-blind, randomized, placebo-controlled trial.
+        negative_examples:
+          - A single-arm pilot study of tranexamic acid.
+          - A retrospective cohort study.
+      - id: RCT-E6
+        slot: other
+        text:
+          de: Für die Studie liegen Ergebnisse vor (Publikation, Registereintrag mit Ergebnissen
+            oder Studienbericht).
+          en: Results of the study are available (publication, registry entry with results, or
+            study report).
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E8
+        slot: other
+        text:
+          de: Veröffentlicht auf Englisch oder Deutsch.
+          en: Published in English or German.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E9
+        slot: other
+        polarity: exclude
+        text:
+          de: Nur Abstract, Kongressbeitrag, narrative Sekundärpublikation (z. B. Review) oder
+            Registereintrag ohne berichtete Ergebnisse.
+          en: Abstract only, congress contribution, narrative secondary publication (e.g. a
+            review), or registry entry without reported results.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - abstract
+          - congress
+          - meeting
+          - review
+          - Kongress
+  - id: IC
+    kind: rct_indirect
+    label:
+      de: RCTs für einen indirekten Vergleich über Placebo (illustrativ)
+      en: RCTs for an indirect comparison via placebo (illustrative)
+    mode: M2
+    mode_rationale:
+      de: Ein indirekter Vergleich mit wenigen, gut abgrenzbaren Studien. Eine Person screent
+        jeden Datensatz, das KI-Modell ersetzt die zweite Person; jede Abweichung geht in die
+        Adjudikation, und 10 % der Ausschlüsse prüft eine zweite Person.
+      en: An indirect comparison with few, clearly delimited trials. One person screens every
+        record and the AI model replaces the second person; every disagreement goes to
+        adjudication, and a second person checks 10% of the exclusions.
+    validation_pack: kittum-validation-pack/2026-10
+    scopes:
+      - a1
+      - a2
+    audit:
+      sentinel_percent: "2"
+      random_audit_percent: "10"
+      census_of_disagreements: true
+    freshness:
+      max_age_months: 3
+      deadline: 2026-12-01
+    source_plan:
+      sources:
+        - id: medline
+          kind: bibliographic
+          name: MEDLINE
+          platform: PubMed
+          study_filter: Cochrane highly sensitive search strategy for RCTs
+        - id: embase
+          kind: bibliographic
+          name: Embase
+          platform: Ovid
+        - id: central
+          kind: bibliographic
+          name: Cochrane Central Register of Controlled Trials
+          platform: Cochrane Library (Wiley)
+        - id: clinicaltrials_gov
+          kind: registry
+          name: ClinicalTrials.gov
+        - id: ctis
+          kind: registry
+          name: Clinical Trials Information System
+    criteria:
+      - id: IC-E1
+        slot: population
+        text:
+          de: Frauen mit klinisch diagnostizierter postpartaler Blutung.
+          en: Women with clinically diagnosed postpartum haemorrhage.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+      - id: IC-E2
+        slot: intervention
+        text:
+          de: Ein Studienarm erhält Placebo zusätzlich zur Standardbehandlung (Brückenkomparator).
+          en: One arm receives placebo in addition to usual care (the bridge comparator).
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+        keywords:
+          - placebo
+      - id: IC-E3-a1
+        slot: comparator
+        text:
+          de: Der andere Studienarm erhält ein Hämostatikum nach vaginaler Geburt.
+          en: The other arm receives a haemostatic agent after vaginal birth.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+      - id: IC-E3-a2
+        slot: comparator
+        text:
+          de: Der andere Studienarm erhält ein Hämostatikum nach Kaiserschnitt.
+          en: The other arm receives a haemostatic agent after caesarean birth.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+      - id: IC-E5
+        slot: study_type
+        text:
+          de: Randomisierte kontrollierte Studie (RCT).
+          en: Randomized controlled trial.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+        keywords:
+          - single-arm
+          - single arm
+          - non-randomized
+          - non-randomised
+          - retrospective
+          - review
+      - id: IC-E9
+        slot: other
+        polarity: exclude
+        text:
+          de: Nur Abstract, Kongressbeitrag oder narrative Sekundärpublikation.
+          en: Abstract only, congress contribution, or narrative secondary publication.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
