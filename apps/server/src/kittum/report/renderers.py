@@ -14,7 +14,7 @@ from kittum.core import Id, Record
 from kittum.judge import VERIFIER_LIMITS, instructions_hash
 from kittum.report import appraised
 from kittum.report.extracted import as_csv, as_json
-from kittum.report.prisma import AI_NOTE, flows, not_retrieved, retrieval_note, svg
+from kittum.report.prisma import AI_NOTE, RETRIEVAL_NOTE, flows, svg
 from kittum.report.ris_format import ris_dumps, ris_entry
 
 if TYPE_CHECKING:
@@ -64,17 +64,14 @@ def md_table(header: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 def render_prisma(review: Review, scope_id: str | None) -> list[RenderedFile]:
     files = []
-    registry = registry_records(review)
     for f in flows(review, scope_id):
         name = safe_name(f"{f.topic_id}-{f.scope_id}")
-        split = not_retrieved(f, attached=set(review.attached_full_texts), registry=registry)
         drawing = svg(
             f,
             "PRISMA 2020 flow diagram",
             subtitle=flow_subtitle(review, f.topic_id, f.scope_id),
             reasons=exclusion_reasons(review, f.topic_id),
-            not_retrieved=split,
-            notes=[AI_NOTE, *([retrieval_note(split)] if f.reports_not_retrieved else [])],
+            notes=[AI_NOTE, RETRIEVAL_NOTE],
             warning=unverified(review),
         )
         files.append(json_file(f"{name}.json", f.model_dump(mode="json")))
@@ -133,41 +130,6 @@ def exclusion_reasons(review: Review, topic_id: str) -> dict[str, str]:
         short = criterion_short(c)
         named[c.id] = own or (f"{n} {short} not met" if c.polarity == "include" else f"{n} {short}")
     return named
-
-
-REGISTRY_ID = re.compile(
-    r"^(NCT\d{8}|ISRCTN\d+|DRKS\d+|ACTRN\d+|ChiCTR[\w-]+|CTRI/[\d/]+|jRCT\w+|IRCT\w+|KCT\d+"
-    r"|PACTR\d+|TCTR\d+|UMIN\d+|NTR\d+|EUCTR[\w-]+|\d{4}-\d{6}-\d{2}(?:-\d{2})?)$",
-    re.IGNORECASE,
-)
-"""Trial registry IDs Kittum knows, as the workbench's `registryUrl` knows them."""
-REGISTRY_JOURNAL = re.compile(
-    r"clinicaltrials\.gov|isrctn|trial regist|clinical trials regist", re.IGNORECASE
-)
-
-
-def registry_records(review: Review) -> set[str]:
-    """The reports that are trial registry entries, not articles: no occurrence has a DOI, and
-    one has a registry ID Kittum knows or names a registry where the journal would be. This is
-    the workbench's `isRegistryOnly`, so Retrieval, Progress, and the PRISMA flow count the same
-    reports: there is no article to retrieve until the trial's results are published."""
-    if review.identity is None:
-        return set()
-    by_occurrence = review.records_by_occurrence()
-    with_doi: set[str] = set()
-    registry: set[str] = set()
-    for link in review.identity.links:
-        found = by_occurrence.get(link.occurrence_id)
-        if found is None:
-            continue
-        record, report = found[1], str(link.report_id)
-        if record.doi:
-            with_doi.add(report)
-        if any(REGISTRY_ID.match(i.strip()) for i in record.registry_ids) or (
-            REGISTRY_JOURNAL.search(record.journal or "")
-        ):
-            registry.add(report)
-    return registry - with_doi
 
 
 # RIS files.

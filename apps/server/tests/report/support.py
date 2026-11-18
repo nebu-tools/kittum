@@ -25,8 +25,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx2
+import pymupdf
 import yaml
 
+from kittum.app import attach_full_text
 from kittum.core import SystemClock, new_id
 from kittum.corpus import confirm, ingest, list_proposals, merge
 from kittum.judge import (
@@ -209,6 +211,23 @@ class ReviewWorld:
                 ).id
         self.records = _records_of(tx, self, revision)
         return revision
+
+    def attach(self, records: list[ScreeningRecord]) -> None:
+        """Attach a full text to each record, as the lead's upload does: the PRISMA flow counts a
+        report retrieved from this event, and from nothing else."""
+        for record in records:
+            doc = pymupdf.open()
+            doc.new_page().insert_text((72, 72), record.title[:80])
+            with self.db.transaction() as tx:
+                attach_full_text(
+                    tx,
+                    self.project_id,
+                    record.item_ref,
+                    doc.tobytes(),
+                    actor_id=self.people.lead,
+                    artifacts=self.artifacts,
+                    ledger=self.ledger,
+                )
 
     # Screening
 
@@ -559,6 +578,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     # Full text: the inhaler trial's report could not be obtained.
     ft: Stage = "full_text"
     retrieved = [world.record(t[k]) for k in ("patch", "gum", "combination", "followup", "spray")]
+    world.attach(retrieved)
     world.open(ft, retrieved, unclear)
     world.snapshot(seqs.statuses, ft)
     c = world.criteria(ft)
@@ -708,12 +728,14 @@ def tranexamic_review(db: Database) -> ReviewWorld:
     world.audit(ta)
     assert world.adjudicate(ta, lambda _: (None, exclude(ta, c, "RCT-E5"))) == 1
 
+    # The lead attaches the full texts one by one, the CTIS entry's results summary last, and
+    # opens full text with all four.
     ft: Stage = "full_text"
-    world.open(
-        ft,
-        [world.record(t[k]) for k in ("harbour", "estuary", "estuary_followup", "ctis_harbour")],
-        unclear,
-    )
+    sought = [
+        world.record(t[k]) for k in ("harbour", "estuary", "estuary_followup", "ctis_harbour")
+    ]
+    world.attach(sought)
+    world.open(ft, sought, unclear)
     c = world.criteria(ft)
     for key in ("harbour", "estuary_followup", "ctis_harbour"):
         world.decide(a, ft, t[key], include(ft, c))
