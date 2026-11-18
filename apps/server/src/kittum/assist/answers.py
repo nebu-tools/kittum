@@ -62,7 +62,7 @@ class FieldNote(Record):
 
 
 PART_MODELS: dict[PartKind, type[Record]] = {"question": ReviewQuestion, "criterion": Criterion}
-_FIXED_FIELDS = frozenset({"id", "extensions"})
+_FIXED_FIELDS = frozenset({"id"})
 
 
 def part_answer(model: type[Record]) -> type[Record]:
@@ -243,7 +243,7 @@ def draft(backend: LlmBackend, recipe_id: str, description: str, language: str =
     """A first protocol from the lead's description of the review."""
 
     def check(data: Any) -> tuple[Any, list[ProtocolIssue]]:
-        # The same path a hand-written source takes: schema, cross-checks, profile rules; then
+        # The same path a hand-written source takes: schema and cross-checks; then
         # what only a draft must have.
         document, issues = _compiled(data)
         if document is not None:
@@ -367,7 +367,7 @@ def _part_changes(
     part: str, kind: PartKind, current: dict[str, Any], answer: Any
 ) -> tuple[list[SuggestedChange], list[ProtocolIssue]]:
     model = PART_MODELS[kind]
-    data = _with_extensions(current, answer.replacement.model_dump(mode="json"))
+    data = answer.replacement.model_dump(mode="json")
     data |= {k: current[k] for k in _FIXED_FIELDS if k in current}
     try:
         replacement = model.model_validate(data).model_dump(mode="json")
@@ -395,29 +395,6 @@ def _part_changes(
         )
     ]
     return changes, []
-
-
-def _with_extensions(current: Any, replacement: Any) -> Any:
-    """`replacement` with the profile `extensions` of `current` at every level, objects in lists
-    matched by ID. The model never sees a schema for them, so it can neither drop nor change
-    them; an object it adds gets none."""
-    if isinstance(current, dict) and isinstance(replacement, dict):
-        out = {
-            k: _with_extensions(current[k], v) if k in current else v
-            for k, v in replacement.items()
-        }
-        if "extensions" in current:
-            out["extensions"] = current["extensions"]
-        return out
-    if isinstance(current, list) and isinstance(replacement, list):
-        by_id = {c["id"]: c for c in current if isinstance(c, dict) and "id" in c}
-        return [
-            _with_extensions(by_id[r["id"]], r)
-            if isinstance(r, dict) and r.get("id") in by_id
-            else r
-            for r in replacement
-        ]
-    return replacement
 
 
 def apply(

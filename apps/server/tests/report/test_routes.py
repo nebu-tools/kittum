@@ -49,7 +49,7 @@ def client(nrt: tuple[ReviewWorld, NrtSeqs], tmp_path: Path) -> Iterator[TestCli
 
 def test_targets_render_download_and_seal_over_http(
     nrt: tuple[ReviewWorld, NrtSeqs],
-    capivasertib: ReviewWorld,
+    tranexamic: ReviewWorld,
     client: TestClient,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -58,7 +58,7 @@ def test_targets_render_download_and_seal_over_http(
     base = f"/api/projects/{world.project_id}/reports"
     as_lead = {"X-Kittum-Reviewer": str(world.people.lead)}
 
-    # A project without a profile offers the core targets; a G-BA dossier adds its own.
+    # Every project offers the same targets.
     listed = client.get(f"{base}/targets").json()
     assert [t["id"] for t in listed] == [
         "prisma",
@@ -69,15 +69,8 @@ def test_targets_render_download_and_seal_over_http(
         "bundle",
     ]
     assert [t["id"] for t in listed if not t["renderable"]] == ["bundle"]
-    dossier = client.get(f"/api/projects/{capivasertib.project_id}/reports/targets").json()
-    assert {t["id"] for t in dossier if t["kind"] == "profile"} == {
-        "gba_amnog.anhang_4a",
-        "gba_amnog.anhang_4b",
-        "gba_amnog.anhang_4c",
-        "gba_amnog.anhang_4d",
-        "gba_amnog.justification_4235",
-        "gba_amnog.anlage_ii_1",
-    }
+    other_targets = client.get(f"/api/projects/{tranexamic.project_id}/reports/targets").json()
+    assert other_targets == listed
 
     # Render the flow at a cutoff; every file and the index download by hash.
     response = client.post(
@@ -109,8 +102,8 @@ def test_targets_render_download_and_seal_over_http(
     raw = world.executions[0].raw_artifact_hashes[0]
     assert world.artifacts.exists(raw)
     assert client.get(f"{base}/artifacts/{raw}", headers=as_lead).status_code == 404
-    other = f"/api/projects/{capivasertib.project_id}/reports/artifacts/{rendered['sha256']}"
-    other_lead = {"X-Kittum-Reviewer": str(capivasertib.people.lead)}
+    other = f"/api/projects/{tranexamic.project_id}/reports/artifacts/{rendered['sha256']}"
+    other_lead = {"X-Kittum-Reviewer": str(tranexamic.people.lead)}
     assert client.get(other, headers=other_lead).status_code == 404
 
     # Reports show every reviewer's decisions and the AI's output: a screener, the auditor, and
@@ -135,7 +128,6 @@ def test_targets_render_download_and_seal_over_http(
     # Requests the review cannot answer say why, and record nothing.
     lead = str(world.people.lead)
     for target, body, reason in (
-        ("gba_amnog.anhang_4c", {}, "needs a protocol with profile 'gba_amnog'"),
         ("nothing", {}, "unknown report target"),
         ("bundle", {}, "sealed with seal_bundle"),
         ("prisma", {"cutoff_seq": 10**9}, "outside the ledger"),

@@ -200,7 +200,7 @@ def check_recording_secrets(settings: Settings) -> None:
             continue
         raise ConfigurationError(
             f"recording needs {name} to be a value {problem}, so that recording can tell it from"
-            ' ordinary content; record with a longer one (README, "Record a live run, replay it")'
+            " ordinary content; record with a longer one (docs/models-and-recordings.md)"
         )
 
 
@@ -401,7 +401,7 @@ JOB_HANDLERS: dict[str, HandlerFactory] = {}
 
 
 def register_job_handler(kind: str, factory: HandlerFactory) -> None:
-    """Add a job kind to `kittum worker`. Extraction (WP-11) registers its jobs here."""
+    """Add a job kind to `kittum worker`. Extraction registers its jobs here."""
     if kind in JOB_HANDLERS and JOB_HANDLERS[kind] is not factory:
         raise ValueError(f"a different handler for {kind!r} is already registered")
     JOB_HANDLERS[kind] = factory

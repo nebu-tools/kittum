@@ -1,19 +1,19 @@
 // The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
-// topic its screening mode, audit plan, sources, and criteria. Every heading uses the profile's
+// topic its screening mode, audit plan, sources, and criteria. Every heading uses the shared
 // words for core concepts. The methods lead writes versions in the form or as YAML, and publishes
 // them.
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { Criterion, ProfileLabels, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
+import type { Criterion, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
 import { formatDate } from "../../lib/format.ts";
-import { keyWords, modeLabel, revealLabel } from "../../lib/labels.ts";
+import { modeLabel, revealLabel } from "../../lib/labels.ts";
 import { Button } from "../../ui/Button.tsx";
 import { failure } from "../../ui/Form.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { plural, useProject } from "../project.tsx";
+import { plural, useProject, type Labels } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
 import type { FormState, Handover } from "./Assistant.tsx";
 import { forSaving, toDoc } from "./document.ts";
@@ -24,7 +24,7 @@ export const MODES: Record<SearchTopic["mode"], string> = {
   M1: "Two people screen every record. The AI screens it too, as a third screener.",
   M2: "One person screens every record and the AI is the second screener. Every disagreement gets a blind extra screen.",
   M3: "Two people screen in the AI's order and stop when a statistical test set in advance passes.",
-  S: "One person of a pool screens each record and asks a colleague for a second opinion when unsure. The colleague sees the first decision.",
+  S: "One person of a pool screens each record and asks another reviewer for a second opinion when unsure. That reviewer sees the first decision.",
 };
 
 /** What a topic's documentation level allows, in a line. */
@@ -251,7 +251,7 @@ function Published({
 }) {
   const { protocol, labels } = useProject();
   if (!protocol) return null;
-  const { protocol: review, profile } = protocol;
+  const { protocol: review } = protocol;
   const criteria = review.topics.reduce((n, t) => n + t.criteria.length, 0);
   const questionName = new Map(
     review.questions.map((q, i) => [q.id, q.short_label || `${labels.scope} ${i + 1}`]),
@@ -407,13 +407,6 @@ function Published({
                 <dd>
                   {protocol.published_at ? formatDate(protocol.published_at) : "Not published"}
                 </dd>
-                <dt
-                  className="text-ink-2"
-                  title="A profile adds the rules and words of one agency or jurisdiction."
-                >
-                  Agency profile
-                </dt>
-                <dd>{profile.id ?? "none (Kittum’s own wording)"}</dd>
                 <dt className="text-ink-2">Content hash</dt>
                 <dd className="flex items-center gap-2">
                   <code className="font-mono text-xs" title={protocol.content_hash}>
@@ -482,16 +475,15 @@ function Jump({
   );
 }
 
-const OUTCOME_KINDS: Record<string, string> = { primary: "Primary", secondary: "Secondary" };
+const OUTCOME_KINDS = { primary: "Primary", secondary: "Secondary" } as const;
 
-/** Outcomes by name. Primary and secondary are said in words; any other category is a
- * vocabulary key, shown only on hover. */
+/** Outcomes by name, primary ones first. */
 function Outcomes({
   outcomes,
 }: {
   outcomes: ReadonlyArray<{
     readonly id: string;
-    readonly category: string;
+    readonly category: keyof typeof OUTCOME_KINDS;
     readonly name: string;
   }>;
 }) {
@@ -501,16 +493,10 @@ function Outcomes({
   return (
     <ul className="grid max-w-[80ch] gap-1.5 text-md">
       {ranked.map((o) => (
-        <li
-          key={o.id}
-          className="flex items-baseline gap-3"
-          title={`Category: ${keyWords(o.category)} (${o.category})`}
-        >
-          {OUTCOME_KINDS[o.category] ? (
-            <span className="w-[5.5rem] flex-none text-sm text-ink-2">
-              {OUTCOME_KINDS[o.category]}
-            </span>
-          ) : null}
+        <li key={o.id} className="flex items-baseline gap-3">
+          <span className="w-[5.5rem] flex-none text-sm text-ink-2">
+            {OUTCOME_KINDS[o.category]}
+          </span>
           <span>{o.name}</span>
         </li>
       ))}
@@ -525,7 +511,7 @@ function Topic({
   single,
 }: {
   topic: SearchTopic;
-  labels: ProfileLabels;
+  labels: Labels;
   questionName: ReadonlyMap<string, string>;
   /** The review's only search topic, covering every question. */
   single: boolean;
@@ -648,13 +634,13 @@ function Criteria({
 }: {
   id: string | undefined;
   topic: SearchTopic;
-  labels: ProfileLabels;
+  labels: Labels;
   title: string;
   count: number;
 }) {
   // The second language folds away: the reader reads one wording, the other is a click on.
-  const bilingual = topic.criteria.some((c) => c.text_de !== c.text_en);
-  const [german, setGerman] = useState(false);
+  const bilingual = topic.criteria.some((c) => c.text_original !== c.text_en);
+  const [original, setOriginal] = useState(false);
   const excluding = topic.criteria.filter((c) => c.polarity === "exclude").length;
   // This topic's own count; `count` is the review's, for a review with one topic the same.
   const own = topic.criteria.length || count;
@@ -673,8 +659,8 @@ function Criteria({
             : ""}
         </p>
         {bilingual ? (
-          <Button kind="quiet" size="sm" className="ml-auto" onClick={() => setGerman((g) => !g)}>
-            {german ? "Hide the German wording" : "Show the German wording"}
+          <Button kind="quiet" size="sm" className="ml-auto" onClick={() => setOriginal((o) => !o)}>
+            {original ? "Hide the original wording" : "Show the original wording"}
           </Button>
         ) : null}
       </header>
@@ -690,7 +676,13 @@ function Criteria({
         </thead>
         <tbody>
           {topic.criteria.map((c, index) => (
-            <CriterionRow key={c.id} criterion={c} index={index} labels={labels} german={german} />
+            <CriterionRow
+              key={c.id}
+              criterion={c}
+              index={index}
+              labels={labels}
+              original={original}
+            />
           ))}
         </tbody>
       </table>
@@ -702,12 +694,12 @@ function CriterionRow({
   criterion: c,
   index,
   labels,
-  german,
+  original,
 }: {
   criterion: Criterion;
   index: number;
-  labels: ProfileLabels;
-  german: boolean;
+  labels: Labels;
+  original: boolean;
 }) {
   return (
     <tr className="border-b border-rule align-baseline last:border-b-0" title={c.id}>
@@ -734,9 +726,9 @@ function CriterionRow({
           <span className="block text-md font-semibold">{c.short_label}</span>
         ) : null}
         <span className="block max-w-[68ch]">{c.text_en}</span>
-        {german && c.text_de !== c.text_en ? (
-          <span className="mt-0.5 block max-w-[68ch] text-sm text-ink-2" lang="de">
-            {c.text_de}
+        {original && c.text_original !== c.text_en ? (
+          <span className="mt-0.5 block max-w-[68ch] text-sm text-ink-2" lang={c.language}>
+            {c.text_original}
           </span>
         ) : null}
         {c.exclusion_reason ? (

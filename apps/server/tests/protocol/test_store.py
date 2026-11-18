@@ -164,7 +164,7 @@ def test_returned_protocols_cannot_change_what_the_store_holds() -> None:
     with pytest.raises(TypeError, match="immutable"):
         version.protocol.questions[0].label.update(en="Everyone")
     with pytest.raises(TypeError, match="immutable"):
-        published.version.protocol.extensions["note"] = "x"
+        published.version.protocol.title.pop("en")
 
     again = store.get_version(null_tx(), project, published.id)
     assert again.version.protocol.criteria[0].text["en"] == (

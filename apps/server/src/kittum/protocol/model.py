@@ -1,15 +1,11 @@
 """The protocol schema (DESIGN.md, "Protocol").
 
-    ReviewProtocol (profile, extensions)
+    ReviewProtocol
         ReviewQuestion: population, intervention, comparators, outcomes
         Outcome, EffectModifier
         SearchTopic
             Criterion, SourcePlan, ReferenceSet, ScreeningMode with AuditPlan and
             StoppingPlan, FreshnessPolicy
-
-The schema knows nothing about any regulator or assessment body. A profile (see
-`kittum.protocol.profile`) adds vocabularies, labels, validation rules, and typed `extensions` on
-the protocol, questions, comparators, outcomes, topics, and criteria.
 
 Every value is a frozen `Record`, so a typo in a source file fails as an unknown field. The order of
 every tuple is part of the content hash: authors control it, and Kittum never reorders it.
@@ -61,8 +57,6 @@ type LocalizedText = Annotated[
     dict[LanguageCode, Text], Field(min_length=1), AfterValidator(deep_freeze)
 ]
 """Text in one or more languages, e.g. `{en: ..., de: ...}`. It must include the default language."""
-type Extensions = Annotated[dict[str, Any], AfterValidator(deep_freeze)]
-"""Profile-defined fields. Empty unless the protocol names a profile that defines them."""
 
 
 def _percent_between(low: Decimal, high: Decimal, *, low_open: bool, high_open: bool) -> Any:
@@ -124,7 +118,6 @@ def documentation_level(mode: ScreeningMode) -> DocumentationLevel:
 class Comparator(Record):
     id: Identifier
     text: LocalizedText
-    extensions: Extensions = Field(default_factory=dict)
 
 
 class ReviewQuestion(Record):
@@ -132,25 +125,23 @@ class ReviewQuestion(Record):
 
     id: Identifier
     label: LocalizedText
-    short_label: Text | None = Field(default=None, exclude_if=lambda v: v is None)
+    short_label: Text | None = None
     """A few words that name the question wherever the full question does not fit ("Phone
-    support vs usual care"). Left out of the protocol (and its hash) when empty."""
+    support vs usual care")."""
     population: LocalizedText
     intervention: LocalizedText
     comparators: tuple[Comparator, ...] = ()
     comparators_are_alternatives: bool = False
     """True when any one comparator answers the question; False for a comparison per comparator."""
     outcomes: tuple[Identifier, ...] = ()  # outcome IDs; empty means every outcome
-    extensions: Extensions = Field(default_factory=dict)
 
 
 class Outcome(Record):
     id: Identifier
-    category: Identifier  # from the profile's "outcome_category" vocabulary, if it has one
+    category: Literal["primary", "secondary"]
     name: LocalizedText
     definition: LocalizedText | None = None
     rationale: LocalizedText | None = None
-    extensions: Extensions = Field(default_factory=dict)
 
 
 class EffectModifier(Record):
@@ -173,16 +164,14 @@ class Criterion(Record):
     text: LocalizedText
     decidable_at: tuple[Stage, ...] = Field(min_length=1)
     applies_to: tuple[str, ...] = Field(min_length=1)  # scope IDs
-    short_label: Text | None = Field(default=None, exclude_if=lambda v: v is None)
-    """A word or two for the screening strip ("Adults", "RCT"); the full text stays on demand.
-    Left out of the protocol (and its hash) when empty."""
-    exclusion_reason: Text | None = Field(default=None, exclude_if=lambda v: v is None)
+    short_label: Text | None = None
+    """A word or two for the screening strip ("Adults", "RCT"); the full text stays on demand."""
+    exclusion_reason: Text | None = None
     """The reason a paper gives for a record this criterion excludes ("Not a randomised
-    controlled trial"), as the PRISMA flow diagram prints it. Left out when empty."""
+    controlled trial"), as the PRISMA flow diagram prints it."""
     keywords: tuple[Text, ...] = ()  # an exclusion quote must contain one of them, if any
     positive_examples: tuple[str, ...] = ()
     negative_examples: tuple[str, ...] = ()
-    extensions: Extensions = Field(default_factory=dict)
 
 
 type ScopeKind = Literal["question", "search_topic"]
@@ -205,10 +194,9 @@ class Source(Record):
     name: Text
     platform: Text | None = None
     study_filter: Text | None = None
-    strategy: Text | None = Field(default=None, exclude_if=lambda v: v is None)
+    strategy: Text | None = None
     """The query as the source's own syntax writes it: PubMed field tags and MeSH, or
-    ClinicalTrials.gov's Essie terms. Left out of the document when absent, so a protocol written
-    before sources had strategies keeps its content hash."""
+    ClinicalTrials.gov's Essie terms."""
 
 
 class Deviation(Record):
@@ -308,26 +296,20 @@ class JudgeInstructions(Record):
     guidance go) and the user message (`user_template`, which must keep `{criteria}` and
     `{text}`). The answer schema and Kittum's quote check stay: they are how Kittum reads and
     checks an answer. The protocol's versions are the prompt's history; clearing a field goes back
-    to Kittum's wording. A topic that sets nothing leaves the instructions out of the protocol,
-    and unset fields stay out of it, so content hashes stay as they were before."""
+    to Kittum's wording."""
 
     strictness: JudgeStrictness = "conservative"
     guidance: Guidance | None = None
     """The review team's own words for the model, slotted into the prompt after the stage rule:
     which records the team counts as relevant, terms it uses, cases it wants read one way."""
-    system_prompt: PromptText | None = Field(default=None, exclude_if=lambda v: v is None)
+    system_prompt: PromptText | None = None
     """The team's own system message in place of Kittum's, or None for Kittum's."""
-    user_template: UserTemplate | None = Field(default=None, exclude_if=lambda v: v is None)
+    user_template: UserTemplate | None = None
     """The team's own user message template in place of Kittum's, or None for Kittum's."""
-
-
-def _default_instructions(value: JudgeInstructions) -> bool:
-    return value == JudgeInstructions()
 
 
 class SearchTopic(Record):
     id: Identifier
-    kind: Identifier  # from the profile's "topic_kind" vocabulary, if it has one
     label: LocalizedText
     mode: ScreeningMode
     mode_rationale: LocalizedText | None = None  # required for M2, M3, and S
@@ -339,12 +321,8 @@ class SearchTopic(Record):
     audit: AuditPlan = AuditPlan()
     stopping: StoppingPlan | None = None  # required for M3, forbidden otherwise
     freshness: FreshnessPolicy
-    judge: JudgeInstructions = Field(
-        default_factory=JudgeInstructions, exclude_if=_default_instructions
-    )
-    """The AI judge's strictness and guidance. Left out of the protocol (and its hash) when
-    neither is set."""
-    extensions: Extensions = Field(default_factory=dict)
+    judge: JudgeInstructions = JudgeInstructions()
+    """The AI judge's strictness and guidance."""
 
     @property
     def documentation(self) -> DocumentationLevel:
@@ -357,12 +335,10 @@ class ReviewProtocol(Record):
     version_label: Text
     title: LocalizedText
     default_language: LanguageCode
-    profile: Identifier | None = None
     questions: tuple[ReviewQuestion, ...] = Field(min_length=1)
     outcomes: tuple[Outcome, ...] = Field(min_length=1)
     effect_modifiers: tuple[EffectModifier, ...] = ()
     search_topics: tuple[SearchTopic, ...] = Field(min_length=1)
-    extensions: Extensions = Field(default_factory=dict)
 
     @property
     def topics(self) -> tuple[SearchTopic, ...]:

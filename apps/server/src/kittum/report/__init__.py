@@ -28,15 +28,9 @@ computes the flows and the disclosure at a cutoff without storing a render.
 
 `render` stores a target's files by hash and returns an `Artifact`; `record_render` keeps the
 render in `report_artifact` with a `report.rendered` event, so a download can be limited to
-what was rendered for the project. `seal_bundle` renders every target into `reports/`, profile
-targets into `reports/dossier/`, and seals the bundle with every registered exporter: this
-package registers the review's tables (protocol, search, corpus, judge, screening, report) at
-import.
-
-Profiles add targets with `register_target` under IDs of the form `<profile id>.<name>`. A
-profile renderer gets the same `Review` and returns files; core never imports a profile.
-
-Owner: WP-14.
+what was rendered for the project. `seal_bundle` renders every target into `reports/` and seals
+the bundle with every registered exporter: this package registers the review's tables (protocol,
+search, corpus, judge, screening, report) at import.
 """
 
 from typing import TYPE_CHECKING, Literal, get_args
@@ -144,11 +138,10 @@ if TYPE_CHECKING:
 type CoreTarget = Literal[
     "prisma", "ris", "search_report", "ai_disclosure", "risk_of_bias", "bundle"
 ]
-type Target = str  # a CoreTarget, or "<profile id>.<name>" from a profile
+type Target = str  # a CoreTarget; stored artifacts keep whatever name they were rendered under
 
 RENDERED_EVENT = "report.rendered"
 REPORTS_DIR = "reports"
-DOSSIER_DIR = "dossier"
 
 
 class ArtifactFile(Record):
@@ -167,28 +160,9 @@ class Artifact(Record):
 
 
 CORE_TARGETS: tuple[CoreTarget, ...] = get_args(CoreTarget.__value__)
-_profile_targets: dict[Target, Renderer] = {}
-
-
-def register_target(target: Target, renderer: Renderer) -> None:
-    """Add a profile's target. Called from the entry points, once per process."""
-    profile, dot, name = target.partition(".")
-    if not (profile and dot and name):
-        raise ValueError(f"profile targets are named '<profile id>.<name>', got {target!r}")
-    if target in _profile_targets:
-        raise ValueError(f"target {target!r} is already registered")
-    _profile_targets[target] = renderer
-
-
-def targets(profile: str | None = None) -> tuple[Target, ...]:
-    """The core targets, then the profile targets: all of them, or only `profile`'s."""
-    names = sorted(t for t in _profile_targets if profile is None or t.startswith(f"{profile}."))
-    return (*CORE_TARGETS, *names)
 
 
 def _renderer(target: Target) -> Renderer:
-    if target in _profile_targets:
-        return _profile_targets[target]
     if target in CORE_RENDERERS:
         return CORE_RENDERERS[target]
     if target == "bundle":
@@ -198,11 +172,7 @@ def _renderer(target: Target) -> Renderer:
 
 def render_files(review: Review, target: Target, scope_id: str | None = None) -> list[RenderedFile]:
     """A target's files for a review, without storing anything."""
-    renderer = _renderer(target)
-    profile = target.partition(".")[0] if target in _profile_targets else None
-    if profile is not None and review.document.profile != profile:
-        raise ReportRequestError(f"target {target!r} needs a protocol with profile {profile!r}")
-    return list(renderer(review, scope_id))
+    return list(_renderer(target)(review, scope_id))
 
 
 def render(
@@ -350,18 +320,11 @@ class RightsProfile(Record):
 
 
 def bundle_reports(review: Review) -> dict[str, bytes]:
-    """Every target the review renders, by bundle path: core targets under `reports/<target>/`,
-    the protocol's profile targets under `reports/dossier/<name>/`."""
+    """Every target the review renders, by bundle path: `reports/<target>/<file>`."""
     files: dict[str, bytes] = {}
-    profile = review.document.profile
-    own = sorted(t for t in _profile_targets if profile and t.startswith(f"{profile}."))
-    for target in (*CORE_RENDERERS, *own):
-        if target in _profile_targets:
-            base = f"{REPORTS_DIR}/{DOSSIER_DIR}/{target.partition('.')[2]}"
-        else:
-            base = f"{REPORTS_DIR}/{target}"
+    for target in CORE_RENDERERS:
         for f in render_files(review, target):
-            files[f"{base}/{f.path}"] = f.data
+            files[f"{REPORTS_DIR}/{target}/{f.path}"] = f.data
     return files
 
 
@@ -456,7 +419,6 @@ register_bundle_check(check_bundle)
 __all__ = [
     "CORE_TARGETS",
     "COVER_TEXT",
-    "DOSSIER_DIR",
     "RENDERED_EVENT",
     "REPORTS_DIR",
     "WORKING_EXPORT",
@@ -529,7 +491,6 @@ __all__ = [
     "read_request",
     "record_render",
     "referenced",
-    "register_target",
     "render",
     "render_files",
     "rendered_file",
@@ -541,7 +502,6 @@ __all__ = [
     "seal_bundle",
     "search_file_name",
     "search_rows",
-    "targets",
     "text_file",
     "trace",
     "working_export",

@@ -3,7 +3,7 @@
 Enrichment never counts toward PRISMA identification, so it may spread load across sources
 ("first healthy source"). Entity tags highlight text and never decide eligibility.
 
-Owner: WP-06. Shipped: OpenAlex, Crossref (including `update-to` retractions,
+Shipped: OpenAlex, Crossref (including `update-to` retractions,
 `clinical-trial-number`, and openly licensed publisher PDF links), Europe PMC, Unpaywall, and
 PubTator 3 clients on `kittum.gateway`, stored `record_enrichment` rows, and the full-text
 waterfall with its lookup sources (PubMed Central, medRxiv and bioRxiv, arXiv, Semantic Scholar,

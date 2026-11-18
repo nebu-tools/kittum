@@ -4,7 +4,7 @@ One record's history from search to extraction, the ledger a page at a time, a f
 check that names every failing event and check, the signed checkpoints, named cutoffs, and the
 PRISMA flows and AI disclosure as of any cutoff. Every answer carries reviewers' decisions or the
 AI's readings, so every route is for the methods lead only (`report.require_lead`): never a
-screener, auditor, or adjudicator of a stage. Until the API has authentication (WP-15) the
+screener, auditor, or adjudicator of a stage. Until the API has authentication the
 caller names the actor in the `X-Kittum-Reviewer` header; that is a stand-in, not a security
 boundary.
 """

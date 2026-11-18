@@ -1,6 +1,6 @@
 -- migrate:up
 
--- Screening (WP-09): stages per scope, the items and assignments reviewers screen, their
+-- Screening: stages per scope, the items and assignments reviewers screen, their
 -- decisions, the AI readings, conflicts, and adjudications. Decisions, undos, and adjudications are
 -- append-only; an undo is a new row, never a changed decision.
 

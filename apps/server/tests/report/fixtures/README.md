@@ -4,9 +4,8 @@
   duplicate CENTRAL records of `tests/screening/fixtures/nrt_central.ris` (same DOIs), one is a
   follow-up report of the CENTRAL patch trial (same NCT number), two are further trials. The
   records are illustrative, like the CENTRAL fixture.
-- `capivasertib_medline.ris`, `capivasertib_central.ris`: MEDLINE and CENTRAL exports for the
-  capivasertib example (`examples/protocols/capivasertib.yaml`). The citations (authors, titles,
-  journals, DOIs, PMIDs, trial numbers) are those of the published reports; the abstracts are
-  short paraphrases written for the tests, not the published abstracts.
-- `capivasertib_ctis.csv`: a CTIS export. The first row is CAPItello-291's EU CT number from the
-  protocol's reference set; the other two rows are illustrative entries with invented numbers.
+- `tranexamic_medline.ris`, `tranexamic_central.ris`, `tranexamic_ctis.csv`: MEDLINE, CENTRAL,
+  and CTIS exports for the tranexamic acid example (`examples/protocols/tranexamic-acid.yaml`).
+  Everything in them is invented for the tests: trial names, authors, journals, abstracts, DOIs
+  (under the `10.5555` test prefix), PMIDs, and trial numbers. The HARBOUR identifiers match the
+  protocol's reference set.

@@ -2,7 +2,7 @@
 
 Pure functions over counts. No I/O, no randomness without an explicit seed.
 
-Owner: WP-13. Every interval is exact or deliberately conservative, never a Wald interval.
+Every interval is exact or deliberately conservative, never a Wald interval.
 The methods and their sources are named in each docstring so a reviewer can check the claim
 without reading the implementation.
 """
@@ -129,7 +129,7 @@ def clopper_pearson(
     the upper bound is ``1 - 0.05 ** (1/10) = 0.259``. Read the endpoint the claim needs; the
     two endpoints are not a single 95% two-sided interval. ``sided="two"`` gives the
     equal-tailed interval, whose lower bound for 10 of 10 is ``0.025 ** (1/10) = 0.692``, the
-    figure quoted in DESIGN.md and the WP-13 acceptance note.
+    figure quoted in DESIGN.md.
     """
 
     _check_proportion(confidence, "confidence")

@@ -60,10 +60,8 @@ Fixtures, recorded once by the scripts in `scripts/`:
 
 ## What the API still lacks
 
-The rest of the earlier list is served now (WP-15).
-
-| Need | Where | Why |
-| --- | --- | --- |
-| Extraction fields as both paths' proposals per semantic key, with accept recording the path and source-view time | WP-11 | The review groups by key and gates Enter on the source. |
-| The evidence quotes of a full-text column in adjudication | WP-09, WP-15 | Adjudication shows how many spans each reviewer cited, not which. |
-| Authentication | WP-15 | `X-Kittum-Reviewer` is a stand-in. |
+| Need | Why |
+| --- | --- |
+| Extraction fields as both paths' proposals per semantic key, with accept recording the path and source-view time | The review groups by key and gates Enter on the source. |
+| The evidence quotes of a full-text column in adjudication | Adjudication shows how many spans each reviewer cited, not which. |
+| Authentication | `X-Kittum-Reviewer` is a stand-in. |

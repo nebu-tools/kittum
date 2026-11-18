@@ -6,13 +6,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
-import type {
-  Criterion,
-  Decision,
-  DecisionTiming,
-  ProfileLabels,
-  ProtocolVersion,
-} from "./schema.ts";
+import type { Criterion, Decision, DecisionTiming, ProtocolVersion } from "./schema.ts";
 import { WorkbenchError } from "./workbench.ts";
 import type { Workbench } from "./workbench.ts";
 
@@ -154,32 +148,15 @@ const anchorView = (a: KittumApi.Anchor) => ({
 
 type Localized = { readonly [language: string]: string };
 
-const LABELS: ReadonlyArray<readonly [keyof ProfileLabels, string]> = [
-  ["scope", "question"],
-  ["population", "slot.population"],
-  ["intervention", "slot.intervention"],
-  ["comparator", "slot.comparator"],
-  ["outcome", "slot.outcome"],
-  ["study_type", "slot.study_type"],
-  ["other", "slot.other"],
-  ["report", "report"],
-  ["study", "study"],
-  ["search_topic", "search_topic"],
-];
-
 const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => {
   const protocol = published.stored.version.protocol;
   const lang = protocol.default_language;
   const text = (t: Localized | null | undefined) =>
     t ? (t[lang] ?? t["en"] ?? Object.values(t)[0] ?? "") : "";
-  const labels = Object.fromEntries(
-    LABELS.map(([key, server]) => [key, published.labels[server] ?? key]),
-  ) as unknown as ProfileLabels;
   return {
     version_id: published.stored.id,
     content_hash: published.stored.version.content_hash,
     published_at: published.stored.published_at ?? null,
-    profile: { id: protocol.profile ?? null, labels },
     protocol: {
       title: text(protocol.title),
       version_label: protocol.version_label,
@@ -201,10 +178,9 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
         return {
           id: topic.id,
           label: text(topic.label),
-          kind: topic.kind,
           mode: topic.mode,
           documentation:
-            published.documentation?.[topic.id] ?? (topic.mode === "S" ? "working" : "complete"),
+            published.documentation[topic.id] ?? (topic.mode === "S" ? "working" : "complete"),
           mode_rationale: topic.mode_rationale ? text(topic.mode_rationale) : null,
           scopes,
           sentinel_percent: topic.audit?.sentinel_percent ?? "0",
@@ -215,7 +191,8 @@ const toProtocol = (published: KittumApi.PublishedProtocol): ProtocolVersion => 
             slot: c.slot,
             polarity: c.polarity ?? "include",
             text_en: c.text["en"] ?? text(c.text),
-            text_de: c.text["de"] ?? c.text["en"] ?? text(c.text),
+            text_original: text(c.text),
+            language: lang,
             short_label: c.short_label ?? null,
             // Read loosely: the field is optional in the protocol and older contracts lack it.
             exclusion_reason:

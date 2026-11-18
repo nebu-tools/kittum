@@ -30,7 +30,6 @@ from kittum.protocol import (
     StoredProtocol,
     compile,
     diff,
-    get_profile,
     get_version,
     latest_published,
     list_versions,
@@ -92,39 +91,11 @@ class DiffPreview(Record):
 
 
 class PublishedProtocol(Record):
-    """The version every decision reads now, with the words the review uses for core concepts:
-    the profile's labels where it has them, the core's otherwise."""
+    """The version every decision reads now."""
 
     stored: StoredProtocol
-    labels: dict[str, str]
-    documentation: dict[str, DocumentationLevel] = Field(default_factory=dict)
+    documentation: dict[str, DocumentationLevel]
     """Each search topic's documentation level, by topic ID."""
-
-
-_CORE_LABELS = {
-    "question": "Question",
-    "comparator": "Comparator",
-    "outcome": "Outcome",
-    "search_topic": "Search topic",
-    "report": "Report",
-    "study": "Study",
-    "slot.population": "Population",
-    "slot.intervention": "Intervention",
-    "slot.comparator": "Comparator",
-    "slot.outcome": "Outcome",
-    "slot.study_type": "Study type",
-    "slot.other": "Other",
-}
-
-
-def _labels(protocol: ReviewProtocol) -> dict[str, str]:
-    if protocol.profile is None:
-        return dict(_CORE_LABELS)
-    profile = get_profile(protocol.profile)
-    language = protocol.default_language
-    return {k: profile.label_for(k, language) or v for k, v in _CORE_LABELS.items()} | {
-        k: profile.label_for(k, language) or k for k in profile.labels if k not in _CORE_LABELS
-    }
 
 
 def _documentation(protocol: ReviewProtocol) -> dict[str, DocumentationLevel]:
@@ -241,10 +212,7 @@ def get_published_protocol(project_id: Id, ctx: Context) -> PublishedProtocol:
         stored = latest_published(tx, project_id)
     if stored is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol is published yet")
-    protocol = stored.version.protocol
-    return PublishedProtocol(
-        stored=stored, labels=_labels(protocol), documentation=_documentation(protocol)
-    )
+    return PublishedProtocol(stored=stored, documentation=_documentation(stored.version.protocol))
 
 
 @router.get("/projects/{project_id}/protocol/source", operation_id="getPublishedProtocolSource")

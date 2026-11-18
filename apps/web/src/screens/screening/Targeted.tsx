@@ -255,7 +255,7 @@ export function SecondOpinionAsked({
       data-testid="second-opinion"
       className="border-b border-rule bg-paper px-4 pt-2 pb-2.5 text-sm"
     >
-      <h2 className="font-semibold">A colleague asks for your second opinion</h2>
+      <h2 className="font-semibold">Another reviewer asks for your second opinion</h2>
       <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
         <span className="text-ink-2">They decided</span>
         <Status term={term}>

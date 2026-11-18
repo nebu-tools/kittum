@@ -1,5 +1,5 @@
 // Complete the pool (DESIGN.md): the papers a topic's searches should find, such as the ones the
-// customer already has, beside what the searches found. The ones the searches missed are the
+// review team already knows, beside what the searches found. The ones the searches missed are the
 // gaps to look into; the new ones are what needs screening. The pool is never a search result.
 // The screen's summary strip carries the counts; this panel lists the papers.
 import { useRouteContext } from "@tanstack/react-router";
@@ -74,7 +74,7 @@ export function poolTotals(pools: ReadonlyMap<string, PoolState>) {
 }
 
 const MATCHING =
-  "The papers the search should find, such as the ones the customer already has. Kittum matches them with the search records by DOI, then PMID, then title, year, and first author. They are not search results and never count as ones.";
+  "The papers the search should find, such as the ones the review team already knows. Kittum matches them with the search records by DOI, then PMID, then title, year, and first author. They are not search results and never count as ones.";
 
 export function KnownPools({
   topics,
@@ -192,7 +192,7 @@ function TopicPool({
         <p className="mt-2 text-sm text-ink-2">Loading the pool.</p>
       ) : pool.pool_size === 0 ? (
         <p className="text-sm text-ink-2">
-          No known papers yet. Add the customer's list as RIS, NBIB, CSV, or Excel.
+          No known papers yet. Add the team's list as RIS, NBIB, CSV, or Excel.
         </p>
       ) : (
         <>

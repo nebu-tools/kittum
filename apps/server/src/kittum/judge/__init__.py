@@ -22,8 +22,6 @@ prompt; `prompt_template` gives the fixed parts around them for the protocol edi
 
 `judge_metrics`, `pair_metrics`, and `fleiss_kappa` measure judges on gold data: recall,
 specificity, work saved, the double-fault rate, the OR rule, and run-to-run agreement.
-
-Owner: WP-08.
 """
 
 from typing import TYPE_CHECKING

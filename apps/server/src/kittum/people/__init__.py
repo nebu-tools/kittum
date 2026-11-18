@@ -7,8 +7,6 @@ figures, the reports. Until the API has authentication, the person comes from it
 stand-in (`X-Kittum-Reviewer`).
 
 Writes go through `kittum.app.lifecycle`, which records each change in the ledger.
-
-Owner: WP-15.
 """
 
 from typing import TYPE_CHECKING, Literal

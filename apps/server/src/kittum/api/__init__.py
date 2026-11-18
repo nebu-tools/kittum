@@ -35,9 +35,6 @@ class Health(Record):
 
 def create_app(context: AppContext | None = None) -> FastAPI:
     """Build the app. Without a context, one is built from the environment at startup."""
-    from kittum.profiles import load_profiles
-
-    load_profiles()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:

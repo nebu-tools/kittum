@@ -1,4 +1,4 @@
-# A generic intervention review with no profile: nicotine replacement therapy (NRT) for smoking
+# An intervention review: nicotine replacement therapy (NRT) for smoking
 # cessation, in the style of a Cochrane review.
 #
 # Illustrative. The questions and eligibility criteria are modelled on the Cochrane reviews
@@ -68,7 +68,6 @@ effect_modifiers:
 
 search_topics:
   - id: TRIALS
-    kind: rct
     label:
       en: Randomized trials of NRT
     mode: M1

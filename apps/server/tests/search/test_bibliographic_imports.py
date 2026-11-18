@@ -127,13 +127,13 @@ def test_web_of_science_imports(
     assert mcnamara.year == 2019 and mcnamara.registry_ids == ("NCT02797132",)
 
 
-def team_list_xlsx() -> bytes:
+def known_papers_xlsx() -> bytes:
     """The team's own list, as a spreadsheet: a title row above the header, columns in their
     own order and names, a numeric year, and a DOI as a link."""
     book = Workbook()
     sheet = book.active
     assert sheet is not None
-    sheet.append(["Known papers, lumacaftor dossier"])
+    sheet.append(["Known papers, lumacaftor review"])
     sheet.append([])
     sheet.append(["Ref ID", "Year", "AUTHOR", "Article Title", "Journal", "doi", "PubMed ID"])
     sheet.append(
@@ -166,7 +166,7 @@ def team_list_xlsx() -> bytes:
 def test_a_teams_list_as_csv_or_xlsx(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
     # Excel's CSV in many locales: semicolons, and the team's own extra columns.
     csv_records = _import(
-        pg, project_id, actor_id, (FIXTURES / "team_list.csv").read_bytes(), "records-csv"
+        pg, project_id, actor_id, (FIXTURES / "known_papers.csv").read_bytes(), "records-csv"
     ).records
     assert [r.title[:30] for r in csv_records] == [
         "Lumacaftor-Ivacaftor in Patien",
@@ -184,7 +184,7 @@ def test_a_teams_list_as_csv_or_xlsx(pg: Tx, project_id: uuid.UUID, actor_id: uu
     (umlauts,) = _import(pg, project_id, actor_id, german.encode("cp1252"), "records-csv").records
     assert umlauts.title.endswith("München") and umlauts.authors == ("Müller K",)
 
-    xlsx = team_list_xlsx()
+    xlsx = known_papers_xlsx()
     k1, k2 = _import(pg, project_id, actor_id, xlsx, "records-xlsx").records
     assert k1.provider_record_id == "K1" and k1.doi == WAINWRIGHT and k1.year == 2015
     assert k1.authors == ("Wainwright CE", "Elborn JS")
@@ -206,7 +206,7 @@ def test_a_teams_list_as_csv_or_xlsx(pg: Tx, project_id: uuid.UUID, actor_id: uu
         ),
         ((FIXTURES / "central_export.ris").read_bytes(), "wos", "not a Web of Science export"),
         ((FIXTURES / "central_export.ris").read_bytes(), "nbib", "starts with a PMID line"),
-        ((FIXTURES / "team_list.csv").read_bytes(), "scopus", "needs EID and Title columns"),
+        ((FIXTURES / "known_papers.csv").read_bytes(), "scopus", "needs EID and Title columns"),
         (b"Name;Year\nPatch trial;2019\n", "records-csv", "needs a Title column"),
         (b"Title;DOI\n;10.1/x\n", "records-csv", "row 2 has no title"),
         (b"Title,PMID\nA trial,PMC123\n", "records-csv", "PMID 'PMC123', not a number"),

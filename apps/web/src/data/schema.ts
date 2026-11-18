@@ -148,7 +148,8 @@ export interface DecisionTiming {
   readonly reveal_shown_at: string | null;
 }
 
-// The protocol as the screens read it: criteria per scope, worded in English and German.
+// The protocol as the screens read it: criteria per scope, worded in English and in the protocol's
+// own language.
 
 const PicoSlot = Schema.Literals([
   "population",
@@ -164,8 +165,10 @@ export const Criterion = Schema.Struct({
   slot: PicoSlot,
   polarity: Schema.Literals(["include", "exclude"]),
   text_en: Schema.String,
-  /** The German wording, or the English one when the protocol has none. */
-  text_de: Schema.String,
+  /** The wording in the protocol's own language, or the English one when it has none there. */
+  text_original: Schema.String,
+  /** The protocol's own language, as a language code. */
+  language: Schema.String,
   /** A word or two for the screening strip; the strip shortens the text when there is none. */
   short_label: Schema.NullOr(Schema.String),
   /** The reason the PRISMA flow names for records excluded on this criterion, if the protocol
@@ -185,7 +188,6 @@ const Scope = Schema.Struct({ id: Schema.String, label: Schema.String });
 const SearchTopic = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
-  kind: Schema.String,
   mode: Schema.Literals(["M1", "M2", "M3", "S"]),
   /** `working` for mode S (a targeted search), `complete` otherwise. Only `working` allows the
    * AI's reading before the decision. */
@@ -217,38 +219,20 @@ const ReviewProtocol = Schema.Struct({
   version_label: Schema.String,
   questions: Schema.Array(Question),
   outcomes: Schema.Array(
-    Schema.Struct({ id: Schema.String, category: Schema.String, name: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      category: Schema.Literals(["primary", "secondary"]),
+      name: Schema.String,
+    }),
   ),
   topics: Schema.Array(SearchTopic),
 });
-
-/**
- * Words a review profile uses for core concepts. The core is domain-neutral; a profile may rename
- * "question" (a subpopulation), "outcome" (an endpoint), and so on. The screens read every such
- * label from here and never hard-code one.
- */
-export const ProfileLabels = Schema.Struct({
-  scope: Schema.String,
-  population: Schema.String,
-  intervention: Schema.String,
-  comparator: Schema.String,
-  outcome: Schema.String,
-  study_type: Schema.String,
-  other: Schema.String,
-  report: Schema.String,
-  study: Schema.String,
-  search_topic: Schema.String,
-});
-export type ProfileLabels = typeof ProfileLabels.Type;
-
-const ProtocolProfile = Schema.Struct({ id: Schema.NullOr(Schema.String), labels: ProfileLabels });
 
 export const ProtocolVersion = Schema.Struct({
   version_id: Id,
   protocol: ReviewProtocol,
   content_hash: Sha256,
   published_at: Schema.NullOr(Schema.String),
-  profile: ProtocolProfile,
 });
 export type ProtocolVersion = typeof ProtocolVersion.Type;
 

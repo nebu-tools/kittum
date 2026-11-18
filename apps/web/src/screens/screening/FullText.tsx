@@ -375,7 +375,7 @@ function FullTextScreen({
   // A reveal that came with the item was shown when the item was, and so was a reading the stage
   // shows before the decision.
   const revealedAt = useRef<string | null>(assignment.reveal || assignment.ai ? shownAt : null);
-  // Mode S, key f: the decision asks a colleague, with this comment.
+  // Mode S, key f: the decision asks another reviewer, with this comment.
   const [asking, setAsking] = useState<{ comment: string; typing: boolean } | null>(null);
 
   // The AI's quote on the page, once its reading is shown: the server places it.
@@ -753,7 +753,7 @@ function FullTextScreen({
                 </div>
                 <p
                   className={`mt-1 text-sm ${isActive || armed ? "" : "line-clamp-2 text-ink-2"}`}
-                  title={c.text_de}
+                  title={c.text_original}
                 >
                   {c.text_en}
                 </p>

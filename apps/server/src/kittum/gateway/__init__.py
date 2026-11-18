@@ -6,8 +6,6 @@ cache. A rerun of a frozen strategy makes no network calls. `RecordingTransport`
 run's responses, without credentials or the contact address, and `RecordedTransport` answers from
 them, for a stack that must stay offline.
 
-Owner: WP-04.
-
     transport = HttpxTransport(contact_email=settings.contact_email)
     gateway = SourceGateway(
         database=db,

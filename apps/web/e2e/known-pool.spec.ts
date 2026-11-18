@@ -1,6 +1,6 @@
 // Complete the pool on the real stack (see stack.ts): a targeted search is set up through
 // `kittum project`, then the lead imports a second database's export in the new NBIB format and
-// the customer's list of known papers as the topic's known pool, and sees what the search found
+// the review team's list of known papers as the topic's known pool, and sees what the search found
 // of it, what it missed, and what is new. Once screening is open, the table marks the pool's
 // records so a screener can filter them.
 import { execFileSync } from "node:child_process";
@@ -32,14 +32,14 @@ const targeted = () => {
   const path = join(scratch, "targeted.yaml");
   const text = readFileSync(PROTOCOL, "utf8").replace(
     '    mode: M1\n    scopes: [nrt-vs-control, combination-vs-single]\n    audit:\n      sentinel_percent: "1"\n      random_audit_percent: "10"\n',
-    '    mode: S\n    mode_rationale:\n      en: Complete the customer\'s pool.\n    scopes: [nrt-vs-control, combination-vs-single]\n    audit:\n      sentinel_percent: "0"\n      random_audit_percent: "0"\n',
+    '    mode: S\n    mode_rationale:\n      en: Complete the known pool.\n    scopes: [nrt-vs-control, combination-vs-single]\n    audit:\n      sentinel_percent: "0"\n      random_audit_percent: "0"\n',
   );
   expect(text).toContain("mode: S");
   writeFileSync(path, text);
   return path;
 };
 
-/** The customer's list as Excel saves CSV in many locales: two papers of the CENTRAL search
+/** The team's list as Excel saves CSV in many locales: two papers of the CENTRAL search
  * (one by DOI, one by its title alone) and one the search missed. */
 const knownPapers = () => {
   const path = join(scratch, "known papers.csv");
@@ -98,7 +98,7 @@ test("complete the pool: the search's gaps, the new records, and the pool in the
     );
   });
 
-  await test.step("the lead adds the customer's papers as the known pool", async () => {
+  await test.step("the lead adds the team's known papers as the known pool", async () => {
     await expect(pool).toContainText("No known papers yet.");
     await pool.getByRole("button", { name: "Add known papers" }).click();
     const dialog = page.getByRole("dialog", { name: "Add known papers" });

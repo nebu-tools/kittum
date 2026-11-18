@@ -1,7 +1,7 @@
 """A search topic's known pool (DESIGN.md, "Complete the pool").
 
-The pool is the set of papers the topic's searches are expected to find, such as the ones a
-customer already has. It is imported from their files and compared with the topic's search
+The pool is the set of papers the topic's searches are expected to find, such as the ones the
+review team already knows. It is imported from their files and compared with the topic's search
 results by the corpus's own identity rules: report identifiers (DOI, PMID, PMCID) first, then a
 fuzzy title with the year or the first author (`check_same_record`). The comparison splits the
 pool into papers the searches found and papers they missed, and the search results into those in

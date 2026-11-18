@@ -36,10 +36,8 @@ def _context(**overrides: object) -> AppContext:
     from dataclasses import replace
 
     from kittum.app import AppContext
-    from kittum.profiles import load_profiles
     from kittum.settings import Settings
 
-    load_profiles()
     ctx = AppContext.from_settings(replace(Settings.from_env(), **overrides))  # type: ignore[arg-type]
     atexit.register(ctx.db.close)
     return ctx

@@ -1254,12 +1254,12 @@ function People({
               <th className={`${th} text-right`}>Exclude</th>
               <th className={`${th} text-right`}>Unclear</th>
               <th className={`${th} text-right`}>
-                <Help text="Second opinions this person asked a colleague for">
+                <Help text="Second opinions this person asked another reviewer for">
                   Asked 2nd opinion
                 </Help>
               </th>
               <th className={`${th} text-right`}>
-                <Help text="Second opinions this person gave on a colleague's decision">
+                <Help text="Second opinions this person gave on another reviewer's decision">
                   Gave 2nd opinion
                 </Help>
               </th>

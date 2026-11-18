@@ -32,7 +32,7 @@ class RenderedFile(Record):
 
 
 type Renderer = Callable[[Review, str | None], Sequence[RenderedFile]]
-"""(review, scope_id or None for every scope) -> files. Profiles register these."""
+"""(review, scope_id or None for every scope) -> files."""
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 

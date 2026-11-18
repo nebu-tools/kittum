@@ -4,7 +4,6 @@ import { createContext, useContext } from "react";
 import type {
   Criterion,
   Member,
-  ProfileLabels,
   ProjectSummary,
   ProtocolVersion,
   Role,
@@ -23,8 +22,8 @@ export interface ProjectState {
 
 export const ProjectContext = createContext<ProjectState | null>(null);
 
-/** The core's words, for a project without a published protocol. */
-const CORE_LABELS: ProfileLabels = {
+/** The words the screens use for the review's core concepts, so each is said one way. */
+const LABELS = {
   scope: "Question",
   population: "Population",
   intervention: "Intervention",
@@ -35,7 +34,8 @@ const CORE_LABELS: ProfileLabels = {
   report: "Report",
   study: "Study",
   search_topic: "Search topic",
-};
+} as const;
+export type Labels = typeof LABELS;
 
 // Who acts is remembered per browser tab, so two reviewers can work side by side in two tabs.
 const key = (projectId: string) => `kittum.reviewer.${projectId}`;
@@ -50,7 +50,7 @@ export const rememberReviewer = (projectId: string, actorId: string | null) => {
   }
 };
 
-/** An English plural for a label ("Study" to "Studies"). Profile labels are singular nouns. */
+/** An English plural for a label ("Study" to "Studies"). Labels are singular nouns. */
 export const plural = (word: string) =>
   /[^aeiou]y$/i.test(word)
     ? `${word.slice(0, -1)}ies`
@@ -85,7 +85,7 @@ export const derive = (state: ProjectState) => {
 };
 
 function compute(state: ProjectState) {
-  const labels = state.protocol?.profile.labels ?? CORE_LABELS;
+  const labels: Labels = LABELS;
   const topics = state.protocol?.protocol.topics ?? [];
   const scopes = topics.flatMap((t) => t.scopes);
   const me = state.me;

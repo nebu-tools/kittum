@@ -19,7 +19,7 @@ credential or the contact address. `cut_off` says why an answer the token budget
 unusable. A replayed completion keeps the recorded model identity and reports its endpoint as
 `replay of <endpoint>`.
 
-Owner: WP-08. `kittum.models.testing.RecordedBackend` replays stored answers for tests.
+`kittum.models.testing.RecordedBackend` replays stored answers for tests.
 """
 
 from kittum.models.openai_compat import (

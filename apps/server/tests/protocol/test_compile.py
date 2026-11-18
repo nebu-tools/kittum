@@ -1,29 +1,17 @@
-"""The core compiler on a profile-free review, and the profile mechanism with a toy profile."""
+"""The protocol compiler on the nicotine replacement example."""
 
 import copy
 import json
-from typing import Any, Literal
+from typing import Any
 
 import pytest
 
-from kittum.core import Record
 from kittum.protocol import (
-    EffectModifier,
-    Profile,
     ProtocolError,
-    ProtocolIssue,
-    ReviewProtocol,
     ScreeningMode,
     compile,
-    path_of,
 )
 from tests.protocol.support import example_source, example_text
-
-NO_PROFILES: dict[str, Profile] = {}
-
-
-def _compile(source: Any, profiles: dict[str, Profile] | None = None) -> Any:
-    return compile(source, profiles=NO_PROFILES if profiles is None else profiles)
 
 
 def _topic(source: dict[str, Any]) -> dict[str, Any]:
@@ -34,9 +22,8 @@ def _criterion(source: dict[str, Any], criterion_id: str) -> dict[str, Any]:
     return next(c for c in _topic(source)["criteria"] if c["id"] == criterion_id)
 
 
-def test_generic_review_compiles_without_a_profile() -> None:
-    protocol = _compile(example_text()).protocol
-    assert protocol.profile is None
+def test_the_example_compiles() -> None:
+    protocol = compile(example_text()).protocol
     assert [(s.id, s.kind) for s in protocol.scopes()] == [
         ("nrt-vs-control", "question"),
         ("combination-vs-single", "question"),
@@ -57,11 +44,11 @@ def test_generic_review_compiles_without_a_profile() -> None:
 
 
 def test_hash_is_stable_across_yaml_json_and_key_order() -> None:
-    from_yaml = _compile(example_text())
+    from_yaml = compile(example_text())
     dumped = json.loads(json.dumps(from_yaml.protocol.model_dump(mode="json")))
-    from_json = _compile(json.dumps(dumped))
-    from_dump = _compile(dumped)
-    reordered = _compile(dict(reversed(list(example_source().items()))))
+    from_json = compile(json.dumps(dumped))
+    from_dump = compile(dumped)
+    reordered = compile(dict(reversed(list(example_source().items()))))
     assert from_yaml.content_hash == from_json.content_hash == from_dump.content_hash
     assert reordered.content_hash == from_yaml.content_hash
     assert from_dump.protocol == from_yaml.protocol
@@ -69,20 +56,19 @@ def test_hash_is_stable_across_yaml_json_and_key_order() -> None:
     edited = example_source()
     edited["title"] = dict(reversed(list(edited["title"].items())))  # language order is not content
     _criterion(edited, "POP")["text"]["en"] += " "  # surrounding whitespace is stripped
-    assert _compile(edited).content_hash == from_yaml.content_hash
+    assert compile(edited).content_hash == from_yaml.content_hash
     _criterion(edited, "POP")["text"]["en"] += " Pregnant smokers included."
-    assert _compile(edited).content_hash != from_yaml.content_hash
+    assert compile(edited).content_hash != from_yaml.content_hash
 
 
-def test_a_question_short_label_is_kept_and_stays_out_of_the_hash_while_unset() -> None:
-    plain = _compile(example_text())
+def test_a_question_short_label_is_kept_and_changes_the_hash() -> None:
+    plain = compile(example_text())
     dumped = plain.protocol.model_dump(mode="json")
-    # Unset, it is not in the stored protocol, so every published hash stays as it was.
-    assert all("short_label" not in q for q in dumped["questions"])
+    assert all(q["short_label"] is None for q in dumped["questions"])
 
     named = example_source()
     named["questions"][0]["short_label"] = "  NRT versus control "
-    compiled = _compile(named)
+    compiled = compile(named)
     assert compiled.protocol.questions[0].short_label == "NRT versus control"
     assert compiled.protocol.model_dump(mode="json")["questions"][0]["short_label"] == (
         "NRT versus control"
@@ -99,7 +85,7 @@ def _break(edit: Any) -> ProtocolError:
     source = example_source()
     edit(source)
     with pytest.raises(ProtocolError) as caught:
-        _compile(source)
+        compile(source)
     return caught.value
 
 
@@ -243,15 +229,15 @@ INVALID = {
         "search_topics[0].freshness.max_age_months",
         "Input should be greater than or equal to 1, got 0",
     ),
-    "extensions without a profile": (
+    "a field the schema does not know": (
         lambda s: s["questions"][0].__setitem__("extensions", {"registry": "x"}),
         "questions[0].extensions",
-        "extensions need a profile that defines them",
+        "unknown field",
     ),
-    "unknown profile": (
-        lambda s: s.__setitem__("profile", "nice"),
-        "profile",
-        "unknown profile 'nice'; registered: none",
+    "an outcome category other than primary or secondary": (
+        lambda s: s["outcomes"][0].__setitem__("category", "tertiary"),
+        "outcomes[0].category",
+        "Input should be 'primary' or 'secondary', got 'tertiary'",
     ),
     "M1 without the disagreement census": (
         lambda s: _topic(s)["audit"].__setitem__("census_of_disagreements", False),
@@ -391,96 +377,20 @@ def test_every_problem_is_reported_at_once() -> None:
 def test_yaml_errors_name_the_line() -> None:
     text = example_text().replace("    mode: M1\n", "    mode: M1\n    mode: M2\n", 1)
     with pytest.raises(ProtocolError) as caught:
-        _compile(text)
+        compile(text)
     (issue,) = caught.value.issues
     line = text.splitlines().index("    mode: M2") + 1
     assert issue.message == f"duplicate key 'mode' at line {line}, column 5"
 
 
 def test_a_dumped_scope_must_match_its_question() -> None:
-    tampered = copy.deepcopy(_compile(example_text()).protocol.model_dump(mode="json"))
+    tampered = copy.deepcopy(compile(example_text()).protocol.model_dump(mode="json"))
     tampered["search_topics"][0]["scopes"][0]["label"] = "All smokers"
     with pytest.raises(ProtocolError) as caught:
-        _compile(tampered)
+        compile(tampered)
     assert [(i.path, i.message) for i in caught.value.issues] == [
         ("search_topics[0].scopes[0]", "scope 'nrt-vs-control' does not match its question")
     ]
-
-
-# A toy profile: a registration per question, a closed outcome vocabulary, a rule, and defaults.
-
-
-class RegistryQuestion(Record):
-    registry: Literal["prospero", "osf"]
-    registration_id: str
-
-
-def _registered_once(protocol: ReviewProtocol) -> list[ProtocolIssue]:
-    seen: set[str] = set()
-    issues = []
-    for i, q in enumerate(protocol.questions):
-        reg = q.extensions["registration_id"]
-        if reg in seen:
-            issues.append(
-                ProtocolIssue(
-                    path=path_of("questions", i, "extensions", "registration_id"),
-                    message=f"registration {reg!r} is used twice",
-                )
-            )
-        seen.add(reg)
-    return issues
-
-
-TOY = Profile(
-    id="toy",
-    label={"en": "Toy"},
-    extensions={"question": RegistryQuestion},
-    vocabularies={
-        "outcome_category": {"primary": {"en": "Primary"}, "secondary": {"en": "Secondary"}}
-    },
-    rules=(_registered_once,),
-    labels={"slot.comparator": {"en": "Control"}},
-    default_effect_modifiers=(EffectModifier(id="sex", label={"en": "Sex"}),),
-)
-
-
-def _on_toy(source: dict[str, Any]) -> dict[str, Any]:
-    source["profile"] = "toy"
-    del source["effect_modifiers"]
-    for i, q in enumerate(source["questions"]):
-        q["extensions"] = {"registry": "prospero", "registration_id": f"CRD42{i}"}
-    return source
-
-
-def _toy_issues(edit: Any) -> list[tuple[str, str]]:
-    source = _on_toy(example_source())
-    edit(source)
-    with pytest.raises(ProtocolError) as caught:
-        _compile(source, {"toy": TOY})
-    return [(i.path, i.message) for i in caught.value.issues]
-
-
-def test_a_profile_validates_its_extensions_vocabularies_and_rules() -> None:
-    protocol = _compile(_on_toy(example_source()), {"toy": TOY}).protocol
-    assert protocol.profile == "toy"
-    assert protocol.questions[0].extensions == {"registry": "prospero", "registration_id": "CRD420"}
-    assert [m.id for m in protocol.effect_modifiers] == ["sex"]
-
-    assert _toy_issues(lambda s: s["questions"][1]["extensions"].__setitem__("registry", "x")) == [
-        ("questions[1].extensions.registry", "Input should be 'prospero' or 'osf', got 'x'")
-    ]
-    assert _toy_issues(lambda s: s["outcomes"][0].__setitem__("category", "tertiary")) == [
-        (
-            "outcomes[0].category",
-            "'tertiary' is not a outcome_category of profile 'toy' (primary, secondary)",
-        )
-    ]
-    assert _toy_issues(lambda s: s["search_topics"][0].__setitem__("extensions", {"a": 1})) == [
-        ("search_topics[0].extensions", "profile 'toy' defines no search_topic extensions")
-    ]
-    assert _toy_issues(
-        lambda s: s["questions"][1]["extensions"].__setitem__("registration_id", "CRD420")
-    ) == [("questions[1].extensions.registration_id", "registration 'CRD420' is used twice")]
 
 
 def test_m3_with_its_stopping_plan_and_audit_compiles() -> None:
@@ -491,7 +401,7 @@ def test_m3_with_its_stopping_plan_and_audit_compiles() -> None:
         stopping=dict(STOPPING),
         audit={"random_audit_percent": "5"},
     )
-    assert _compile(source).protocol.search_topics[0].stopping is not None
+    assert compile(source).protocol.search_topics[0].stopping is not None
 
 
 def test_s_needs_only_its_rationale_and_keeps_working_documentation() -> None:
@@ -501,16 +411,16 @@ def test_s_needs_only_its_rationale_and_keeps_working_documentation() -> None:
         mode_rationale={"en": "A confounder search for the team's own use."},
         audit={"sentinel_percent": "0", "random_audit_percent": "0"},
     )
-    (topic,) = _compile(source).protocol.search_topics
+    (topic,) = compile(source).protocol.search_topics
     assert topic.mode == ScreeningMode.S and topic.validation_pack is None
     assert topic.documentation == "working"
-    assert _compile(example_source()).protocol.search_topics[0].documentation == "complete"
+    assert compile(example_source()).protocol.search_topics[0].documentation == "complete"
 
 
 def test_scopes_as_a_tuple_of_ids_resolve_like_a_list() -> None:
     source = example_source()
     _topic(source)["scopes"] = tuple(_topic(source)["scopes"])
-    assert _compile(source).content_hash == _compile(example_text()).content_hash
+    assert compile(source).content_hash == compile(example_text()).content_hash
 
 
 def test_question_labels_with_surrounding_whitespace_still_resolve_as_scopes() -> None:
@@ -518,7 +428,7 @@ def test_question_labels_with_surrounding_whitespace_still_resolve_as_scopes() -
     question = source["questions"][1]
     lang = source["default_language"]
     question["label"][lang] = f"  {question['label'][lang]}\n"
-    protocol = _compile(source).protocol
+    protocol = compile(source).protocol
     assert protocol.search_topics[0].scopes[1].label == "Combination NRT versus a single form"
 
 
@@ -555,10 +465,10 @@ def test_percentages_are_exact_decimals_in_range(
     )
     topic[part][field] = value
     if error is None:
-        _compile(source)
+        compile(source)
         return
     with pytest.raises(ProtocolError) as caught:
-        _compile(source)
+        compile(source)
     (issue,) = caught.value.issues
     assert issue.path == f"search_topics[0].{part}.{field}"
     assert error in issue.message

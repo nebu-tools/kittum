@@ -11,12 +11,6 @@ Criteria render as the question a reviewer answers (`render_question`) and as th
 fragment the AI judge answers with a verbatim quote (`render_prompt` for `judge.v2`;
 `render_prompt_rules` and `render_prompt_criterion` for `judge.v3`). `diff` compares versions.
 `kittum.protocol.testing.InMemoryProtocolStore` stands in for the Postgres store.
-
-The core schema is domain-neutral. A protocol may name a `profile` that adds vocabularies,
-labels, typed `extensions`, and validation rules (`register_profile`); this package never imports
-one.
-
-Owner: WP-03.
 """
 
 from kittum.protocol.compiler import (
@@ -62,14 +56,6 @@ from kittum.protocol.model import (
     StoppingPlan,
     documentation_level,
 )
-from kittum.protocol.profile import (
-    ExtensionPoint,
-    Profile,
-    Rule,
-    get_profile,
-    register_profile,
-    registered_profiles,
-)
 from kittum.protocol.render import (
     AnswerKey,
     CriterionQuestion,
@@ -104,7 +90,6 @@ __all__ = [
     "Deviation",
     "DocumentationLevel",
     "EffectModifier",
-    "ExtensionPoint",
     "FieldChange",
     "FreshnessPolicy",
     "Guidance",
@@ -118,7 +103,6 @@ __all__ = [
     "Polarity",
     "PostgresProtocolStore",
     "PressReview",
-    "Profile",
     "ProtocolDiff",
     "ProtocolError",
     "ProtocolIssue",
@@ -128,7 +112,6 @@ __all__ = [
     "ReferenceSet",
     "ReviewProtocol",
     "ReviewQuestion",
-    "Rule",
     "Scope",
     "ScreeningMode",
     "SearchTopic",
@@ -141,7 +124,6 @@ __all__ = [
     "compile",
     "diff",
     "documentation_level",
-    "get_profile",
     "get_version",
     "latest_published",
     "list_versions",
@@ -150,8 +132,6 @@ __all__ = [
     "protocol_warnings",
     "publish",
     "register_attribution",
-    "register_profile",
-    "registered_profiles",
     "render_prompt",
     "render_prompt_criterion",
     "render_prompt_rules",

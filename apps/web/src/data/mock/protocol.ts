@@ -47,7 +47,6 @@ const project = (
         version_id: `${id}-v1`,
         version_label: "1.2",
         content_hash: "9f2c1e7a54b0d3c8e61f0a2b7d94c5e3a18f6b2d0c7e9a4f5b3d1c8e2a6f0b94",
-        profile: null,
       }
     : null,
   members: [
@@ -88,7 +87,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     slot: "population",
     text_en:
       "Adults with locally advanced or metastatic biliary tract cancer: cholangiocarcinoma, gallbladder or ampullary carcinoma",
-    text_de:
+    language: "de",
+    text_original:
       "Erwachsene mit lokal fortgeschrittenem oder metastasiertem biliärem Karzinom: Cholangiokarzinom, Gallenblasen- oder Ampullenkarzinom",
     decidable_at: both,
     applies_to: [SCOPE_A],
@@ -103,7 +103,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     exclusion_reason: null,
     slot: "population",
     text_en: "Disease progressed after at least one prior systemic therapy for advanced disease",
-    text_de:
+    language: "de",
+    text_original:
       "Progress nach mindestens einer systemischen Vortherapie der fortgeschrittenen Erkrankung",
     decidable_at: both,
     applies_to: [SCOPE_A],
@@ -119,7 +120,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     slot: "intervention",
     text_en:
       "Ivosidenib, or a protocol comparator in at least one arm: FOLFOX, fluorouracil-based chemotherapy, or best supportive care",
-    text_de:
+    language: "de",
+    text_original:
       "Ivosidenib oder ein Vergleich des Protokolls in mindestens einem Arm: FOLFOX, Fluorouracil-basierte Chemotherapie oder Best Supportive Care",
     decidable_at: both,
     applies_to: [SCOPE_A],
@@ -134,7 +136,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     exclusion_reason: null,
     slot: "study_type",
     text_en: "Randomised controlled trial",
-    text_de: "Randomisierte kontrollierte Studie",
+    language: "de",
+    text_original: "Randomisierte kontrollierte Studie",
     decidable_at: both,
     applies_to: [SCOPE_A],
     polarity: "include",
@@ -149,7 +152,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     slot: "other",
     text_en:
       "Report or secondary analysis of a trial; not a review, meta-analysis, pooled analysis, protocol, or letter",
-    text_de:
+    language: "de",
+    text_original:
       "Bericht oder Sekundäranalyse einer Studie; keine Übersicht, Metaanalyse, gepoolte Analyse, kein Protokoll oder Leserbrief",
     decidable_at: both,
     applies_to: [SCOPE_A],
@@ -165,7 +169,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     slot: "outcome",
     text_en:
       "Reports a patient-relevant endpoint: overall survival, symptoms, health-related quality of life, or adverse events",
-    text_de:
+    language: "de",
+    text_original:
       "Berichtet einen patientenrelevanten Endpunkt: Gesamtüberleben, Symptomatik, gesundheitsbezogene Lebensqualität oder unerwünschte Ereignisse",
     decidable_at: ["full_text"],
     applies_to: [SCOPE_A],
@@ -196,7 +201,6 @@ export const PROTOCOL: ProtocolVersion = {
       {
         id: "T2-indirect",
         label: "RCTs for indirect comparisons",
-        kind: "rct_indirect",
         mode: "M1",
         documentation: "complete",
         mode_rationale: null,
@@ -215,20 +219,4 @@ export const PROTOCOL: ProtocolVersion = {
   },
   content_hash: "9f2c1e7a54b0d3c8e61f0a2b7d94c5e3a18f6b2d0c7e9a4f5b3d1c8e2a6f0b94",
   published_at: "2026-10-01T09:00:00Z",
-  // The neutral profile. A regulatory profile supplies its own words for the same concepts.
-  profile: {
-    id: null,
-    labels: {
-      scope: "Population",
-      population: "Population",
-      intervention: "Intervention",
-      comparator: "Comparator",
-      outcome: "Outcome",
-      study_type: "Study design",
-      other: "Publication",
-      report: "Report",
-      study: "Study",
-      search_topic: "Search topic",
-    },
-  },
 };

@@ -22,7 +22,7 @@ import type {
   SuggestedChange,
 } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
-import { keyWords, MODE_LABELS } from "../../lib/labels.ts";
+import { MODE_LABELS } from "../../lib/labels.ts";
 import { formatTime } from "../../lib/format.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Field, Select, TextArea, failure } from "../../ui/Form.tsx";
@@ -1923,17 +1923,11 @@ function FormView({
   );
 }
 
-/** "Primary outcome", "Secondary outcome 2", or for a profile's own category "Outcome 3,
- * mortality": numbered within its kind when the kind has more than one. */
+/** "Primary outcome" or "Secondary outcome 2": numbered within its category when the category
+ * has more than one. */
 const outcomeLabel = (outcomes: Doc["outcomes"], index: number) => {
   const o = outcomes[index]!;
-  const kind =
-    o.category === "primary"
-      ? "Primary outcome"
-      : o.category === "secondary"
-        ? "Secondary outcome"
-        : null;
-  if (!kind) return `Outcome ${index + 1}, ${keyWords(o.category).toLowerCase()}`;
+  const kind = o.category === "primary" ? "Primary outcome" : "Secondary outcome";
   const same = outcomes.filter((y) => y.category === o.category);
   return same.length > 1 ? `${kind} ${same.indexOf(o) + 1}` : kind;
 };

@@ -107,8 +107,8 @@ def replace(document: Any, path: str, value: Any) -> Any:
 
 
 # Fields that hold no writing: the format version and the default language, which every
-# protocol shares, the profile, which only a lead names, and IDs, which name their object.
-_UNWRITTEN = frozenset({"schema_version", "default_language", "profile"})
+# protocol shares, and IDs, which name their object.
+_UNWRITTEN = frozenset({"schema_version", "default_language"})
 
 
 def written(document: Any) -> dict[str, Any]:

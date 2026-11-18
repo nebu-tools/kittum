@@ -91,7 +91,7 @@ def test_the_pool_splits_the_search_into_found_missed_and_new(
 
     # The team's list: Wainwright by DOI (with a resolver prefix), Milla by PMID, Burgel by
     # title only. A paper with the right title but another DOI is another paper.
-    team = (FIXTURES / "team_list.csv").read_bytes() + (
+    team = (FIXTURES / "known_papers.csv").read_bytes() + (
         b"4;Lumacaftor-Ivacaftor in Patients with Cystic Fibrosis Homozygous for Phe508del CFTR"
         b";Wainwright CE;N Engl J Med;2015;10.1056/NEJMc1510000;;the correspondence\n"
     )
@@ -103,7 +103,7 @@ def test_the_pool_splits_the_search_into_found_missed_and_new(
         entries,
         file_hash=sha256_hex(team),
         format="records-csv",
-        file_name="team_list.csv",
+        file_name="known_papers.csv",
         actor_id=actor_id,
         ledger=ledger,
     )

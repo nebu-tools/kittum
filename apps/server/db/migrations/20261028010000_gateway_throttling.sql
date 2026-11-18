@@ -1,6 +1,6 @@
 -- migrate:up
 
--- Gateway bookkeeping (WP-04): every outbound attempt, the content-addressed response cache,
+-- Gateway bookkeeping: every outbound attempt, the content-addressed response cache,
 -- and the daily request budgets. The rate-limit buckets themselves are created by pyrate-limiter
 -- on first use, one table per source, so their shape stays that library's business.
 

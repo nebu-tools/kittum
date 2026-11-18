@@ -8,14 +8,14 @@ key (`KITTUM_CHECKPOINT_KEY`) and writes the bundle under `bundles/` beside the 
 Reports show every reviewer's decisions and the AI's output, so rendering, downloading, and
 sealing are for the methods lead only (`report.require_lead`): never a screener, auditor, or
 adjudicator of a stage. The working export is the exception: it follows the screening table's
-blinding, so a screener or auditor exports only their own rows. Until the API has authentication (WP-15), the caller names the actor in
+blinding, so a screener or auditor exports only their own rows. Until the API has authentication, the caller names the actor in
 the body or in the `X-Kittum-Reviewer` header; that is a stand-in, not a security boundary.
 """
 
 import base64
 import binascii
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Path, Response
 from pydantic import Field
@@ -23,7 +23,7 @@ from pydantic import Field
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.core import Id, NotFoundError, Record, new_id
 from kittum.ledger import LedgerIntegrityError, SigningKey
-from kittum.protocol import Stage, latest_published
+from kittum.protocol import Stage
 from kittum.report import (
     CORE_TARGETS,
     XLSX,
@@ -41,7 +41,6 @@ from kittum.report import (
     rendered_file,
     require_lead,
     seal_bundle,
-    targets,
     working_export,
 )
 from kittum.runs import CommandIdReused
@@ -66,7 +65,6 @@ Reviewer = Annotated[
 
 class TargetInfo(Record):
     id: str
-    kind: Literal["core", "profile"]
     renderable: bool
     """False for `bundle`, which is sealed, not rendered."""
 
@@ -147,20 +145,10 @@ def _errors() -> Generator[None]:
 
 
 @router.get("/targets", operation_id="listReportTargets")
-def list_targets(project_id: Id, ctx: Context) -> list[TargetInfo]:
-    """The core targets, and the targets of the profile the published protocol names."""
-    with _errors(), ctx.db.transaction() as tx:
-        stored = latest_published(tx, project_id)
-    profile = stored.version.protocol.profile if stored else None
-    names = targets(profile) if profile else CORE_TARGETS
-    return [
-        TargetInfo(
-            id=t,
-            kind="core" if t in CORE_TARGETS else "profile",
-            renderable=t != "bundle",
-        )
-        for t in names
-    ]
+def list_targets(project_id: Id) -> list[TargetInfo]:
+    """The targets every project can render, and the bundle, which is sealed instead."""
+    del project_id  # every project offers the same targets
+    return [TargetInfo(id=t, renderable=t != "bundle") for t in CORE_TARGETS]
 
 
 @router.post("/targets/{target}/render", operation_id="renderReportTarget")
