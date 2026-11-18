@@ -16,12 +16,7 @@ import type {
 } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { formatDateTime } from "../../lib/format.ts";
-import {
-  MODE_LABELS,
-  modeLabel,
-  revealLabel,
-  sourceLabel,
-} from "../../lib/labels.ts";
+import { MODE_LABELS, modeLabel, revealLabel, sourceLabel } from "../../lib/labels.ts";
 import { Button } from "../../ui/Button.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { Page } from "../../ui/Page.tsx";
