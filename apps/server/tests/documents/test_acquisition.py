@@ -16,8 +16,8 @@ from kittum.documents import (
     acquisitions,
     check_report,
 )
-from kittum.enrich import EnrichmentConfig, WorkIds, lookup_full_text
-from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.enrich import WorkIds, lookup_full_text
+from kittum.gateway import Credentials, RecordedTransport, SourceGateway
 from kittum.gateway.testing import FakeTransport, PassThroughGateway, response
 from kittum.ledger.testing import InMemoryLedger
 from kittum.storage import MemoryStore
@@ -153,18 +153,18 @@ def test_a_supplement_named_as_the_article_is_a_wrong_document_and_the_waterfall
     document and is not stored; PubMed Central's copy of the article is acquired instead."""
     project = new_project(pg)
     actor = new_id()
-    gateway = PassThroughGateway(RecordedTransport(JMIR, contact_email=CONTACT_EMAIL))
     # A key opts in to Semantic Scholar; the recording answers whatever key is sent.
-    config = EnrichmentConfig(
+    keys = Credentials.of(
         contact_email=CONTACT_EMAIL, semantic_scholar_api_key="a-semantic-scholar-key"
     )
+    gateway = PassThroughGateway(RecordedTransport(JMIR), keys)
     ids = WorkIds(doi=JMIR_DOI, pmid="40116747")
     best = json.loads((JMIR / "unpaywall-10.2196-66709.json").read_bytes())["best_oa_location"]
     named = best["url_for_pdf"]
     assert "formative_v9i1e66709_app2.pdf" in named and best["license"] == "cc-by"
-    scholar = lookup_full_text(gateway, "semanticscholar", ids, config=config)
+    scholar = lookup_full_text(gateway, "semanticscholar", ids)
     assert scholar is not None and [loc.url for loc in scholar.locations] == [named]
-    pmc = lookup_full_text(gateway, "pmc", ids, config=config)
+    pmc = lookup_full_text(gateway, "pmc", ids)
     assert pmc is not None
     (article,) = pmc.locations
     assert (article.licence, article.version) == ("CC BY", "published")
@@ -305,3 +305,69 @@ def test_a_failed_download_keeps_what_the_source_said(pg):
         "Search service is down. Retry later.",
         "Automated downloads are not allowed from this address.",
     ]
+
+
+class _Echoing:
+    """Sources that quote the request back: a 503 that names the contact address, a connection
+    error that quotes the User-Agent, a publisher's refusal that echoes the User-Agent and the
+    key, if it got one, then the PDF."""
+
+    def send(self, request: HttpRequest) -> HttpResponse:
+        wire = dict(request.on_the_wire().headers)
+        if "down" in request.url:
+            return response(503, f'{{"errMsg":"No more today for {CONTACT_EMAIL}."}}'.encode())
+        if "broken" in request.url:
+            raise ConnectionError(f"reset while sending User-Agent: {wire['User-Agent']}")
+        if "refused" in request.url:
+            said = f"{wire['User-Agent']} with key {wire.get('Authorization', 'none')}"
+            return response(403, f"Refused {said}.".encode())
+        return response(200, LESOTHO.read_bytes())
+
+
+def test_an_acquisition_attempt_after_a_source_error_keeps_no_private_value(pg):
+    project = new_project(pg)
+    clock = FixedClock(WHEN)
+    keys = Credentials.of(contact_email=CONTACT_EMAIL, openalex_api_key="openalex-key-4b1d")
+    gateway = SourceGateway(
+        database=savepoint_db(pg),
+        transport=_Echoing(),
+        artifacts=MemoryStore(),
+        credentials=keys,
+        buckets="memory",
+        cache="memory",
+        max_attempts=2,
+        clock=clock,
+        sleep=lambda seconds: clock.advance(timedelta(seconds=seconds)),
+    )
+    ledger = InMemoryLedger(clock)
+    outcome = acquire(
+        pg,
+        gateway=gateway,
+        artifacts=MemoryStore(),
+        ledger=ledger,
+        clock=clock,
+        project_id=project,
+        actor_id=new_id(),
+        locations=[
+            FullTextLocation(source="europepmc", url="https://down.example.org/a.pdf"),
+            FullTextLocation(source="unpaywall", url="https://broken.example.org/b.pdf"),
+            FullTextLocation(source="openalex", url="https://refused.example.org/c.pdf"),
+            FullTextLocation(source="openalex", url="https://ok.example.org/d.pdf"),
+        ],
+    )
+
+    assert [(a.outcome, a.status) for a in outcome.attempts] == [
+        ("unavailable", 503),
+        ("unavailable", None),
+        ("http_error", 403),
+        ("acquired", 200),
+    ]
+    assert outcome.attempts[0].message == "No more today for contact@example.invalid."
+    # The OpenAlex key goes only to OpenAlex's API, never to the publisher a PDF link names.
+    refused = outcome.attempts[2].message
+    assert refused is not None
+    assert refused.endswith(" (+mailto:contact@example.invalid) with key none."), refused
+    (event,) = ledger.events(pg, project)
+    kept = json.dumps([event.payload, [a.model_dump(mode="json") for a in outcome.attempts]])
+    assert "unreachable: the connection broke off (ConnectionError)" in kept
+    assert not keys.holds(kept.encode()), kept

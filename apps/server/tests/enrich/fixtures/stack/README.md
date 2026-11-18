@@ -2,8 +2,10 @@
 
 What `KITTUM_GATEWAY_RECORDINGS` serves in the end-to-end journeys and `tests/app/test_enrichment.py`.
 Recorded on 28.10.2026 by `uv run python -m tests.app.record_stack`, through Kittum's own HTTP
-transport, with the contact address `test@kittum.dev` and no API key. `manifest.json` maps each
-request URL to its body, status, and content type.
+transport, with a contact address and no API key. `manifest.json` maps each
+request URL, as the caller built it and without the contact address, to its body, status, and
+content type. Where a source echoed the address in a body, the body holds
+`contact@example.invalid` instead, as the gateway now writes it.
 
 | Responses | Source and terms |
 | --- | --- |

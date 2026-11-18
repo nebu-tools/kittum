@@ -188,8 +188,6 @@ def _project_step(args: argparse.Namespace) -> int:
                     args.source,
                     ctx.gateway,
                     ctx.artifacts,
-                    contact_email=ctx.settings.contact_email,
-                    ncbi_api_key=ctx.settings.ncbi_api_key,
                     clock=ctx.clock,
                 )
                 assert source is not None  # argparse allows only the live sources

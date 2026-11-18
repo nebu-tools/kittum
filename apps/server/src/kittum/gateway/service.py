@@ -1,6 +1,7 @@
 """The gateway implementation: throttling, retries, budgets, and the response cache."""
 
 import base64
+import logging
 import math
 import random
 import re
@@ -18,12 +19,16 @@ from psycopg.types.json import Jsonb
 from pyrate_limiter import AbstractBucket, Duration, InMemoryBucket, PostgresBucket, Rate, RateItem
 
 from kittum.core import Clock, SystemClock, canonical_json, sha256_hex
+from kittum.gateway.credentials import NO_CREDENTIALS, Credentials
 from kittum.gateway.errors import (
     GatewayError,
     SourceBudgetExhausted,
+    SourceNotConfigured,
     SourceUnavailable,
     UnknownSource,
+    unreached,
 )
+from kittum.gateway.messages import source_message
 from kittum.gateway.policies import default_policies
 from kittum.gateway.recorded import NotRecorded
 from kittum.gateway.types import (
@@ -32,7 +37,6 @@ from kittum.gateway.types import (
     SourcePolicy,
     Transport,
     effective_request,
-    public_text,
 )
 
 if TYPE_CHECKING:
@@ -40,6 +44,8 @@ if TYPE_CHECKING:
 
     from kittum.db import Database, Tx
     from kittum.storage import ArtifactStore
+
+log = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
 """Attempts per request before the gateway gives up."""
@@ -57,12 +63,10 @@ _DEFAULT_POLICIES = default_policies()
 class _Retryable(Exception):
     """A response worth another attempt. Carries the attempt number for jitter."""
 
-    def __init__(
-        self, status: int, attempt: int, retry_after: float | None, body: bytes = b""
-    ) -> None:
-        super().__init__(f"status {status}")
-        self.status = status
-        self.body = body
+    def __init__(self, response: HttpResponse, attempt: int, retry_after: float | None) -> None:
+        super().__init__(f"status {response.status}")
+        self.status = response.status
+        self.response = response
         self.attempt = attempt
         self.retry_after = retry_after
 
@@ -95,7 +99,8 @@ class _SharedPool:
 
 
 def request_hash(request: HttpRequest) -> str:
-    """The cache and attempt key: SHA-256 over the request's canonical JSON."""
+    """The cache and attempt key: SHA-256 over the request's canonical JSON, as the caller built
+    it. The credentials the gateway attaches for the send are not part of it."""
     request = effective_request(request)
     body = None if request.body is None else base64.b64encode(request.body).decode("ascii")
     payload = {
@@ -169,6 +174,10 @@ class SourceGateway:
     are rows in Postgres. Responses are cached content-addressed in the `ArtifactStore`, indexed in
     Postgres; with `cache="memory"` the index lives in this process only, so responses that are
     not the sources' own (recordings, in offline mode) never reach the deployment's cache.
+
+    `credentials` are the deployment's private values. The gateway attaches them to a request
+    only for the send, and scrubs them from everything that comes back before it records,
+    caches, returns, or quotes it (`kittum.gateway.credentials`).
     """
 
     def __init__(
@@ -178,6 +187,7 @@ class SourceGateway:
         transport: Transport,
         artifacts: ArtifactStore,
         policies: Mapping[str, SourcePolicy] | None = None,
+        credentials: Credentials = NO_CREDENTIALS,
         clock: Clock | None = None,
         buckets: str = "postgres",
         cache: str = "postgres",
@@ -194,6 +204,7 @@ class SourceGateway:
         self._transport = transport
         self._artifacts = artifacts
         self._policies = dict(policies) if policies is not None else dict(_DEFAULT_POLICIES)
+        self._credentials = credentials
         self._clock = clock or SystemClock()
         self._bucket_backend = buckets
         self._memory_cache: dict[str, HttpResponse] | None = {} if cache == "memory" else None
@@ -219,20 +230,34 @@ class SourceGateway:
             cached = self._cached(key)
             if cached is not None:
                 return cached
+        missing = self._credentials.missing(source, request)
+        if missing is not None:
+            raise SourceNotConfigured(source, missing)
 
+        log.info("%s %s %s", source, request.method, effective_request(request).url)
+        sent = self._credentials.attach(source, request)
         attempts = [0]
         try:
             response = self._retrying(
-                self._retry_delay, self._attempt, source, policy, request, key, attempts
+                self._retry_delay, self._attempt, source, policy, sent, key, attempts
             )
         except _Retryable as error:
-            raise SourceUnavailable(source, error.status, attempts[0], body=error.body) from error
+            message = source_message(error.response.body)
+            raise SourceUnavailable(source, error.status, attempts[0], message=message) from None
         except NotRecorded as error:
-            raise SourceUnavailable(source, None, attempts[0], str(error)) from error
+            reason = self._credentials.scrub_text(str(error))
+            raise SourceUnavailable(source, None, attempts[0], reason) from None
+        except GatewayError:
+            raise
+        except Exception as error:
+            raise unreached(source, error, attempts[0]) from None
 
         if 200 <= response.status < 300:
             self._remember(source, key, response)
         return response
+
+    def configured(self, source: str) -> bool:
+        return self._credentials.configured(source)
 
     def close(self) -> None:
         with self._buckets_lock:
@@ -261,18 +286,18 @@ class SourceGateway:
             self._consume_budget(policy)
             started = self._clock.now()
             try:
-                response = self._transport.send(request)
+                # The one place a response or an error comes back from a source.
+                response = self._credentials.scrub(self._transport.send(request))
             except Exception as error:
-                self._record_attempt(
-                    source, key, number, None, self._elapsed_ms(started), public_text(str(error))
-                )
+                said = self._credentials.scrub_text(f"{type(error).__name__}: {error}")
+                self._record_attempt(source, key, number, None, self._elapsed_ms(started), said)
                 raise
 
             self._record_attempt(source, key, number, response.status, self._elapsed_ms(started))
             self._observe(source, response)
             if response.status in RETRYABLE_STATUSES:
                 retry_after = _seconds(self._header(response, "retry-after"), self._clock.now())
-                raise _Retryable(response.status, number, retry_after, response.body)
+                raise _Retryable(response, number, retry_after)
             return response
 
     def _retry_delay(self, error: Exception) -> bool | float:

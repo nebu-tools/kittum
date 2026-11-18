@@ -42,7 +42,7 @@ export const stackEnv = () => ({
   // own; the server refuses them otherwise.
   KITTUM_OFFLINE: "1",
   // The address the recordings were made with; it is part of each Crossref and Unpaywall URL.
-  KITTUM_CONTACT_EMAIL: "test@kittum.dev",
+  KITTUM_CONTACT_EMAIL: "librarian@example.org",
 });
 
 export default async function stack() {

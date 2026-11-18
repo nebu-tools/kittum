@@ -26,6 +26,7 @@ from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.extraction import run_handler
 from kittum.gateway import (
     CONTACT_PLACEHOLDER,
+    Credentials,
     HttpxTransport,
     RecordedTransport,
     RecordingTransport,
@@ -175,9 +176,21 @@ def _named_secrets(settings: Settings) -> list[tuple[str, str]]:
 
 
 def recording_secrets(settings: Settings) -> tuple[str, ...]:
-    """What no recording may hold: every configured key and password. The contact address is
-    handled apart (it may stand in its contact parameter, as a placeholder)."""
+    """Every configured key and password. With the contact address, what no recording may hold."""
     return tuple(dict.fromkeys(value for _, value in _named_secrets(settings)))
+
+
+def credentials(settings: Settings) -> Credentials:
+    """The deployment's private values: the settings the gateway places in requests, and every
+    other key and password, which nothing Kittum stores, caches, or seals may hold."""
+    return Credentials.of(
+        recording_secrets(settings),
+        contact_email=settings.contact_email,
+        ncbi_api_key=settings.ncbi_api_key,
+        openalex_api_key=settings.openalex_api_key,
+        semantic_scholar_api_key=settings.semantic_scholar_api_key,
+        core_api_key=settings.core_api_key,
+    )
 
 
 def check_recording_secrets(settings: Settings) -> None:
@@ -322,19 +335,13 @@ def build_gateway(
         )
     if settings.gateway_record:
         check_recording_secrets(settings)
+    private = credentials(settings)
     if settings.gateway_recordings:
-        transport = RecordedTransport(
-            settings.gateway_recordings, contact_email=settings.contact_email
-        )
+        transport = RecordedTransport(settings.gateway_recordings)
     else:
-        transport = transport or HttpxTransport(contact_email=settings.contact_email)
+        transport = transport or HttpxTransport()
         if settings.gateway_record:
-            transport = RecordingTransport(
-                transport,
-                settings.gateway_record,
-                contact_email=settings.contact_email,
-                secrets=recording_secrets(settings),
-            )
+            transport = RecordingTransport(transport, settings.gateway_record, credentials=private)
     in_memory = settings.offline or settings.gateway_record is not None
     return SourceGateway(
         database=db,
@@ -342,9 +349,8 @@ def build_gateway(
         buckets="memory" if settings.offline else "postgres",
         cache="memory" if in_memory else "postgres",
         artifacts=artifacts,
-        policies=default_policies(
-            contact_email=settings.contact_email, ncbi_api_key=settings.ncbi_api_key
-        ),
+        policies=default_policies(private),
+        credentials=private,
         clock=clock,
     )
 

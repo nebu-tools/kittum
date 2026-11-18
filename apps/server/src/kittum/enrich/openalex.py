@@ -31,12 +31,6 @@ class Work(Record):
     oa_locations: tuple[OaLocation, ...] = ()
 
 
-def _headers(api_key: str | None) -> tuple[tuple[str, str], ...]:
-    if not api_key:
-        return ()
-    return (("Authorization", f"Bearer {api_key}"),)
-
-
 def _url(filter_value: str) -> str:
     params = urlencode(
         {"filter": filter_value, "per-page": "100", "select": SELECT},
@@ -129,8 +123,8 @@ def _work(raw: dict[str, Any]) -> Work | None:
     )
 
 
-def _fetch(gateway: Gateway, api_key: str | None, filter_value: str) -> list[Work]:
-    body = fetch_json(gateway, SOURCE, _url(filter_value), headers=_headers(api_key))
+def _fetch(gateway: Gateway, filter_value: str) -> list[Work]:
+    body = fetch_json(gateway, SOURCE, _url(filter_value))
     if body is None:
         return []
     if not isinstance(body, dict):
@@ -146,15 +140,14 @@ def works(
     *,
     dois: list[str] | tuple[str, ...] = (),
     pmids: list[str] | tuple[str, ...] = (),
-    api_key: str | None = None,
     batch_size: int = 50,
 ) -> list[Work]:
     """Look works up in batches. DOI and PMID filters cannot be combined, so one request each."""
     found: list[Work] = []
     doi_values = [d for d in dict.fromkeys(canonical_doi(doi) for doi in dois) if d]
     for batch in chunks(doi_values, batch_size):
-        found += _fetch(gateway, api_key, "doi:" + "|".join(batch))
+        found += _fetch(gateway, "doi:" + "|".join(batch))
     pmid_values = [str(pmid) for pmid in dict.fromkeys(pmids) if pmid]
     for batch in chunks(pmid_values, batch_size):
-        found += _fetch(gateway, api_key, "pmid:" + "|".join(batch))
+        found += _fetch(gateway, "pmid:" + "|".join(batch))
     return found

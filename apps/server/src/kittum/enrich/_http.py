@@ -7,8 +7,7 @@ from kittum.gateway import (
     Gateway,
     HttpRequest,
     SourceBudgetExhausted,
-    public_text,
-    public_url,
+    SourceNotConfigured,
     source_message,
 )
 from kittum.gateway import SourceUnavailable as GatewayUnavailable
@@ -21,9 +20,9 @@ class SourceUnavailable(Exception):
     """A source did not answer. The "first healthy source" policy moves to the next one.
 
     `status` is the last HTTP status, when the source answered at all; `message` is what the
-    source said about the failure in its own words, when it said anything. The reason, the
-    message, and the URL lose the contact address and credentials here, so the ledger, the run
-    reports, and the worker log never get them."""
+    source said about the failure in its own words, when it said anything. The gateway scrubbed
+    what both come from, and the URL is the request as the adapter built it, so none of them
+    holds the contact address or a key."""
 
     def __init__(
         self,
@@ -35,23 +34,13 @@ class SourceUnavailable(Exception):
         kind: FailureKind = "http_error",
         url: str | None = None,
     ) -> None:
-        reason = public_text(reason)
         super().__init__(f"{source}: {reason}")
         self.source = source
         self.reason = reason
         self.status = status
-        self.message = None if message is None else public_text(message)
+        self.message = message
         self.kind = kind
         self.url = url
-
-    @property
-    def url(self) -> str | None:
-        """The request that failed, without the contact address and credentials."""
-        return self._url
-
-    @url.setter
-    def url(self, url: str | None) -> None:
-        self._url = None if url is None else public_url(url)
 
 
 def unavailable(source: str, error: Exception) -> SourceUnavailable:
@@ -63,11 +52,14 @@ def unavailable(source: str, error: Exception) -> SourceUnavailable:
             source,
             f"HTTP {error.status} after {error.attempts} attempts",
             status=error.status,
-            message=source_message(error.body),
+            message=error.message,
         )
     if isinstance(error, SourceBudgetExhausted):
         return SourceUnavailable(source, str(error), kind="budget")
-    return SourceUnavailable(source, f"{type(error).__name__}: {error}", kind="unreachable")
+    if isinstance(error, SourceNotConfigured):
+        return SourceUnavailable(source, str(error), kind="unreachable")
+    # Not the gateway's: only its kind, as its text may quote the request.
+    return SourceUnavailable(source, type(error).__name__, kind="unreachable")
 
 
 def fetch(

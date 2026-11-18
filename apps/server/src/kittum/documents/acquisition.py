@@ -30,7 +30,7 @@ from kittum.documents.model import (
     FullTextLocation,
 )
 from kittum.documents.store import NotAPdf, get_document, ingest
-from kittum.gateway import Gateway, HttpRequest, SourceUnavailable, source_message
+from kittum.gateway import Gateway, GatewayError, HttpRequest, SourceUnavailable, source_message
 from kittum.ledger import EventDraft, Ledger
 
 if TYPE_CHECKING:
@@ -80,20 +80,26 @@ class FetchedLocation:
 
 
 def fetch_location(gateway: Gateway, location: FullTextLocation) -> FetchedLocation:
-    """Ask one location for its PDF. Network only."""
+    """Ask one location for its PDF. Network only.
+
+    The error text is the gateway's, which it built from what it scrubbed; of any other error
+    only the kind is kept, as its text may quote the request."""
     try:
         response = gateway.fetch(
             location.source,
             HttpRequest(url=location.url, headers=(("Accept", "application/pdf"),)),
         )
-    except Exception as e:
+    except GatewayError as e:
+        unavailable = e if isinstance(e, SourceUnavailable) else None
         return FetchedLocation(
             location=location,
             response=None,
             error=f"{type(e).__name__}: {e}",
-            status=e.status if isinstance(e, SourceUnavailable) else None,
-            message=source_message(e.body) if isinstance(e, SourceUnavailable) else None,
+            status=unavailable.status if unavailable else None,
+            message=unavailable.message if unavailable else None,
         )
+    except Exception as e:
+        return FetchedLocation(location=location, response=None, error=type(e).__name__)
     return FetchedLocation(location=location, response=response)
 
 

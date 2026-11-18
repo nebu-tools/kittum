@@ -6,7 +6,7 @@
       "status": 200
     }
   ],
-  "https://api.unpaywall.org/v2/10.2196%2F66709?email=contact%40example.invalid": [
+  "https://api.unpaywall.org/v2/10.2196%2F66709": [
     {
       "content_type": "application/json",
       "file": "unpaywall-10.2196-66709.json",
@@ -41,7 +41,7 @@
       "status": 200
     }
   ],
-  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=40116747&idtype=pmid&format=json&tool=kittum&email=contact%40example.invalid": [
+  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=40116747&idtype=pmid&format=json&tool=kittum": [
     {
       "content_type": "application/json",
       "file": "10031ad0a31ccfec079749730f219ecdab848ed2b055408d4e824fcdf2a9dd6b.json",

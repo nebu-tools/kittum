@@ -17,6 +17,7 @@ change.
 import json
 import os
 import re
+import shutil
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -24,9 +25,10 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import quote, quote_plus
 from uuid import UUID
 
-from kittum.core import Id, Record, Sha256, SystemClock, canonical_json, sha256_hex
+from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_json, sha256_hex
 from kittum.ledger.keys import VerifyKey, document_message
 from kittum.ledger.model import AuditEvent, Checkpoint, EventDraft, LedgerIntegrityError
 from kittum.ledger.postgres import PostgresLedger
@@ -226,6 +228,36 @@ class Bundle(Record):
     checkpoint: Checkpoint
 
 
+class PrivateValueInBundle(KittumError):
+    """A file of the bundle holds one of the deployment's private values (the contact address,
+    an API key, a password). The bundle is removed and not sealed."""
+
+    def __init__(self, file: str) -> None:
+        super().__init__(
+            f"the bundle file {file} holds a configured private value (the contact address, a key,"
+            " or a password), so the bundle was not sealed"
+        )
+        self.file = file
+
+
+def _holding_private(out_dir: Path, private: Iterable[str]) -> str | None:
+    """The first file under `out_dir`, binary ones included, that holds one of `private`, plain
+    or percent-encoded, in any case."""
+    needles = {
+        s.lower().encode()
+        for value in private
+        if value
+        for s in (value, quote_plus(value), quote(value, safe=""))
+    }
+    if not needles:
+        return None
+    for path in sorted(p for p in out_dir.rglob("*") if p.is_file()):
+        folded = path.read_bytes().lower()
+        if any(n in folded for n in needles):
+            return path.relative_to(out_dir).as_posix()
+    return None
+
+
 def _manifest_hash(manifest: dict[str, Any]) -> str:
     return sha256_hex(canonical_json(manifest))
 
@@ -242,12 +274,17 @@ def seal(
     ledger: Ledger | None = None,
     exporters: Iterable[Exporter] | None = None,
     clock: Clock | None = None,
+    private: Iterable[str] = (),
 ) -> Bundle:
     """Write the bundle for the chain through `cutoff_seq` into `out_dir`, which must be empty.
 
     Verifies the chain first, signs a checkpoint at `cutoff_seq` unless `signer` already has one
     there, and records the seal as a `ledger.bundle_sealed` event in `tx`. If `tx` rolls back,
     the files stay behind but the ledger never mentions them.
+
+    Before the seal is recorded, every file written is scanned for each of `private`, the
+    deployment's private values; one that holds any removes the bundle and raises
+    `PrivateValueInBundle`, naming the file.
     """
     ledger = ledger or PostgresLedger(clock)
     clock = clock or SystemClock()
@@ -321,6 +358,10 @@ def seal(
     manifest["signature"] = signer.sign(document_message(manifest, domain=MANIFEST_DOMAIN))
     (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
     manifest_hash = _manifest_hash(manifest)
+    leaked = _holding_private(out_dir, private)
+    if leaked is not None:
+        shutil.rmtree(out_dir)
+        raise PrivateValueInBundle(leaked)
 
     ledger.append(
         tx,

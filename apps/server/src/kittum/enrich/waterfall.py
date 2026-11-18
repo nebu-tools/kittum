@@ -19,7 +19,7 @@ from kittum.enrich.types import FullTextCandidate, RecordEnrichment
 if TYPE_CHECKING:
     from datetime import date
 
-    from kittum.enrich.types import EnrichmentConfig, FullTextLookup, WorkIds
+    from kittum.enrich.types import FullTextLookup, WorkIds
     from kittum.gateway import Gateway
 
 WATERFALL = (
@@ -76,19 +76,19 @@ def full_text_candidates(
     return tuple(candidate for _, _, candidate in ranked)
 
 
-def skipped_source(source: str, config: EnrichmentConfig) -> str | None:
+def skipped_source(source: str, gateway: Gateway) -> str | None:
     """Why the waterfall leaves a lookup source out for every report, or `None` when it asks it."""
-    if source == core.SOURCE and not config.core_api_key:
-        return core.NO_KEY
-    if source == semanticscholar.SOURCE and not config.semantic_scholar_api_key:
-        return semanticscholar.NO_KEY
-    return None
+    if gateway.configured(source):
+        return None
+    return {core.SOURCE: core.NO_KEY, semanticscholar.SOURCE: semanticscholar.NO_KEY}.get(
+        source, f"{source} is not configured"
+    )
 
 
-def lookup_applies(source: str, ids: WorkIds, *, config: EnrichmentConfig) -> bool:
+def lookup_applies(source: str, ids: WorkIds, gateway: Gateway) -> bool:
     """Whether `lookup_full_text` would ask `source` about the work: it has an identifier the
     source takes, and the source is not skipped."""
-    if skipped_source(source, config) is not None:
+    if skipped_source(source, gateway) is not None:
         return False
     match source:
         case pmc.SOURCE:
@@ -105,21 +105,19 @@ def lookup_applies(source: str, ids: WorkIds, *, config: EnrichmentConfig) -> bo
             return False
 
 
-def lookup_full_text(
-    gateway: Gateway, source: str, ids: WorkIds, *, config: EnrichmentConfig
-) -> FullTextLookup | None:
+def lookup_full_text(gateway: Gateway, source: str, ids: WorkIds) -> FullTextLookup | None:
     """Ask one lookup source for a work's open files. `None` when the source cannot be asked about
     this work (no identifier it takes) or is skipped; raises `SourceUnavailable` when it fails."""
     match source:
         case pmc.SOURCE:
-            return pmc.find(gateway, ids, email=config.contact_email)
+            return pmc.find(gateway, ids)
         case biorxiv.SOURCE:
             return biorxiv.find(gateway, ids)
         case arxiv.SOURCE:
             return arxiv.find(gateway, ids)
         case semanticscholar.SOURCE:
-            return semanticscholar.find(gateway, ids, api_key=config.semantic_scholar_api_key)
+            return semanticscholar.find(gateway, ids)
         case core.SOURCE:
-            return core.find(gateway, ids, api_key=config.core_api_key)
+            return core.find(gateway, ids)
         case _:
             raise ValueError(f"{source} is not a full-text lookup source")

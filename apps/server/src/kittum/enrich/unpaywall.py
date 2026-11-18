@@ -1,11 +1,11 @@
 """Unpaywall: the best open-access location for a DOI, with its licence.
 
-Unpaywall needs an `email` parameter, so the source is skipped when no contact address is
-configured. One request per DOI. See docs/sources.md.
+Unpaywall needs an `email` parameter, which the gateway adds, so the source is skipped when no
+contact address is configured. One request per DOI. See docs/sources.md.
 """
 
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from kittum.core import canonical_doi
 from kittum.enrich._http import SourceUnavailable, fetch_json
@@ -18,8 +18,8 @@ SOURCE = "unpaywall"
 BASE = "https://api.unpaywall.org/v2"
 
 
-def _url(doi: str, email: str) -> str:
-    return f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}?{urlencode({'email': email})}"
+def _url(doi: str) -> str:
+    return f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}"
 
 
 def _version(value: Any) -> OaVersion | None:
@@ -50,10 +50,10 @@ def _location(raw: Any) -> OaLocation | None:
     return None
 
 
-def best_oa_location(gateway: Gateway, doi: str, *, email: str | None) -> OaLocation | None:
-    if not email:
+def best_oa_location(gateway: Gateway, doi: str) -> OaLocation | None:
+    if not gateway.configured(SOURCE):
         return None
-    body = fetch_json(gateway, SOURCE, _url(doi, email))
+    body = fetch_json(gateway, SOURCE, _url(doi))
     if body is None:
         return None
     if not isinstance(body, dict):

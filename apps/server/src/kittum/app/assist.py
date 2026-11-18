@@ -188,7 +188,5 @@ def count_query(
         ctx.artifacts,
         dialect,
         strategy,
-        contact_email=ctx.settings.contact_email,
-        ncbi_api_key=ctx.settings.ncbi_api_key,
         clock=ctx.clock,
     )

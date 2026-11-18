@@ -43,7 +43,6 @@ from psycopg.types.json import Jsonb
 
 from kittum.app.enrichment import (
     ENRICHMENT_JOB,
-    enrichment_config,
     lock_project_runs,
     queue_enrichment,
 )
@@ -86,7 +85,6 @@ from kittum.runs import JobOutput, JobSpec, PermanentJobError
 if TYPE_CHECKING:
     from kittum.app.context import AppContext
     from kittum.db import Tx
-    from kittum.enrich import EnrichmentConfig
     from kittum.gateway import Gateway
     from kittum.ledger import Ledger
     from kittum.runs import Handler, Job, JobContext, JobQueue
@@ -560,7 +558,7 @@ def next_step(
     attempts: list[dict[str, Any]],
     *,
     ids: WorkIds,
-    config: EnrichmentConfig,
+    gateway: Gateway,
 ) -> _Step | None:
     """The waterfall's next step for a report: a location not tried yet, or a lookup source not
     asked yet, whichever comes first in the waterfall; `None` when nothing is left."""
@@ -572,7 +570,7 @@ def next_step(
         if loc["url"] not in tried
     ]
     lookup = next(
-        (s for s in LOOKUP_SOURCES if s not in asked and lookup_applies(s, ids, config=config)),
+        (s for s in LOOKUP_SOURCES if s not in asked and lookup_applies(s, ids, gateway)),
         None,
     )
     fetch = min(pending, key=lambda p: (p[0], p[1])) if pending else None
@@ -597,10 +595,9 @@ class _Report:
         job: Job,
         run: dict[str, Any],
         report_id: Id,
-        config: EnrichmentConfig,
     ) -> None:
         self.ctx, self.gateway, self.ledger, self.queue, self.job = ctx, gateway, ledger, queue, job
-        self.run, self.report_id, self.config = run, report_id, config
+        self.run, self.report_id = run, report_id
         self.project_id, self.actor = run["project_id"], run["requested_by"]
         self.ref = str(report_id)
         self.facts: ReportFacts | None = None
@@ -664,7 +661,7 @@ class _Report:
                 row["locations"],
                 [*row["carried"], *row["attempts"]],
                 ids=self.ids,
-                config=self.config,
+                gateway=self.gateway,
             )
         if step is None:
             return False
@@ -675,7 +672,7 @@ class _Report:
     def _lookup(self, source: str, done: int) -> bool:
         error: SourceUnavailable | None = None
         try:  # outside any transaction
-            found = lookup_full_text(self.gateway, source, self.ids, config=self.config)
+            found = lookup_full_text(self.gateway, source, self.ids)
         except SourceUnavailable as e:
             found, error = None, e
         terms = _terms()
@@ -799,11 +796,10 @@ class _Report:
 def open_access_handler(
     ctx: AppContext, gateway: Gateway, ledger: Ledger, queue: JobQueue
 ) -> Handler:
-    config = enrichment_config(ctx)
     skipped = [
         {"source": s, "reason": reason}
         for s in LOOKUP_SOURCES
-        if (reason := skipped_source(s, config)) is not None
+        if (reason := skipped_source(s, gateway)) is not None
     ]
 
     def handle(job: Job, job_ctx: JobContext) -> JobOutput:
@@ -827,7 +823,7 @@ def open_access_handler(
         for report_id in pending:
             if job_ctx.lease_lost.is_set():
                 return JobOutput()  # the heartbeat saw another worker take over
-            _Report(ctx, gateway, ledger, queue, job, run, report_id, config).run_waterfall()
+            _Report(ctx, gateway, ledger, queue, job, run, report_id).run_waterfall()
 
         def publish(tx: Tx) -> None:
             view = open_access_run(tx, run["project_id"], run_id)

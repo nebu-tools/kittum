@@ -1,70 +1,40 @@
-"""The real transport: httpx2 over HTTP/2, one connection pool, a polite User-Agent.
+"""The real transport: httpx2 over HTTP/2, one connection pool, redirects followed.
 
 HTTP/2 because some publishers' bot protection answers an HTTP/1.1 client with a challenge page
 instead of the PDF it asked for (link.springer.com did in October 2026).
 
-httpx2 logs every request with its URL at INFO. Its lines go through `public_text`, so the worker
-log never holds the contact address or a credential.
+It sends `HttpRequest.on_the_wire()`, the only form that holds the credentials. httpx2 and
+httpcore log each request with that URL at INFO and DEBUG, so both stay at WARNING; the gateway
+logs the request as the caller built it.
 """
 
-import importlib.metadata
 import logging
 
 import httpx2
 
 from kittum.core import sha256_hex
-from kittum.gateway.types import HttpRequest, HttpResponse, effective_request, public_text
+from kittum.gateway.types import HttpRequest, HttpResponse
 
-
-class _PublicUrls(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.msg, record.args = public_text(record.getMessage()), None
-        return True
-
-
-logging.getLogger("httpx2").addFilter(_PublicUrls())
-
-
-def _version() -> str:
-    try:
-        return importlib.metadata.version("kittum-server")
-    except importlib.metadata.PackageNotFoundError:  # pragma: no cover - installed in CI
-        return "0.0.0"
-
-
-def user_agent(contact_email: str | None = None) -> str:
-    """The value sent in `User-Agent`, naming the version and a contact."""
-    agent = f"Kittum/{_version()}"
-    if contact_email:
-        agent += f" (+mailto:{contact_email})"
-    return agent
+for _name in ("httpx2", "httpcore"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
 
 
 class HttpxTransport:
     """Sends one request per call over a shared client with a fixed timeout."""
 
-    def __init__(
-        self,
-        *,
-        contact_email: str | None = None,
-        timeout: float = 30.0,
-        client: httpx2.Client | None = None,
-    ) -> None:
-        self.user_agent = user_agent(contact_email)
+    def __init__(self, *, timeout: float = 30.0, client: httpx2.Client | None = None) -> None:
         self._client = client or httpx2.Client(
             timeout=httpx2.Timeout(timeout), follow_redirects=True, http2=True
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:
-        request = effective_request(request)
-        headers = dict(request.headers)
-        headers.setdefault("User-Agent", self.user_agent)
+        wire = request.on_the_wire()
         response = self._client.request(
-            request.method,
-            request.url,
-            params=list(request.params),
-            headers=headers,
-            content=request.body,
+            wire.method,
+            wire.url,
+            params=list(wire.params),
+            headers=list(wire.headers),
+            content=wire.body,
         )
         body = response.content
         return HttpResponse(
@@ -72,6 +42,7 @@ class HttpxTransport:
             headers=tuple(response.headers.multi_items()),
             body=body,
             body_hash=sha256_hex(body),
+            url=str(response.url),
         )
 
     def close(self) -> None:
@@ -84,4 +55,4 @@ class HttpxTransport:
         self.close()
 
 
-__all__ = ["HttpxTransport", "user_agent"]
+__all__ = ["HttpxTransport"]

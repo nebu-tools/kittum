@@ -28,7 +28,7 @@ from kittum.api import AppContext, create_app
 from kittum.app import job_handlers, open_access
 from kittum.app.demo import DATA, PDFS, PROTOCOL, SENTINELS, demo_judge
 from kittum.core import FixedClock, new_id
-from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.gateway import Credentials, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
@@ -120,6 +120,7 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         gateway=SourceGateway(
             database=db,
             transport=stack,
+            credentials=Credentials.of(contact_email=CONTACT_EMAIL),
             artifacts=artifacts,
             buckets="memory",
             max_attempts=2,

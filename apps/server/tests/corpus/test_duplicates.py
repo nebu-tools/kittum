@@ -59,7 +59,7 @@ def api(tmp_path: Path) -> Iterator[tuple[TestClient, str, str]]:
         # Offline, as the workbench's stack runs: the recorded responses, a cache of its own.
         gateway=SourceGateway(
             database=db,
-            transport=RecordedTransport(DUPLICATES_DIR, contact_email=DUPLICATES_CONTACT),
+            transport=RecordedTransport(DUPLICATES_DIR),
             artifacts=artifacts,
             buckets="memory",
             cache="memory",

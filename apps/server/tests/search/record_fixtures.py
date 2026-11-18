@@ -94,26 +94,23 @@ DUPLICATES_EUROPEPMC = (
     ' AND PUB_TYPE:"Randomized Controlled Trial" AND FIRST_PDATE:[2024-01-01 TO 2024-03-31]'
 )
 DUPLICATES_CTGOV = "NCT03589989 OR NCT02564315"
-DUPLICATES_CONTACT = "test@kittum.dev"  # the stack's contact address (apps/web/e2e/stack.ts)
+DUPLICATES_CONTACT = "librarian@example.org"  # the gateway attaches it; no recording holds it
 
 
 def record_duplicates() -> None:
     """Run the three searches as Kittum does, through `RecordingTransport`, so the gateway replays
     them byte for byte. Europe PMC also runs with two records a page, to record its paging."""
-    from kittum.gateway import HttpxTransport, RecordingTransport
+    from kittum.gateway import Credentials, HttpxTransport, RecordingTransport
     from kittum.gateway.testing import PassThroughGateway
     from kittum.search import CtgovSource, EuropePmcSource, PubMedSource, SearchPlan
     from kittum.storage import MemoryStore
 
-    transport = RecordingTransport(
-        HttpxTransport(contact_email=DUPLICATES_CONTACT),
-        DUPLICATES_DIR,
-        contact_email=DUPLICATES_CONTACT,
-    )
-    gateway = PassThroughGateway(transport)
+    credentials = Credentials.of(contact_email=DUPLICATES_CONTACT)
+    transport = RecordingTransport(HttpxTransport(), DUPLICATES_DIR, credentials=credentials)
+    gateway = PassThroughGateway(transport, credentials)
     artifacts = MemoryStore()
     runs = [
-        (PubMedSource(gateway, artifacts, contact_email=DUPLICATES_CONTACT), DUPLICATES_PUBMED),
+        (PubMedSource(gateway, artifacts), DUPLICATES_PUBMED),
         (EuropePmcSource(gateway, artifacts), DUPLICATES_EUROPEPMC),
         (EuropePmcSource(gateway, artifacts, page_size=2), DUPLICATES_EUROPEPMC),
         (CtgovSource(gateway, artifacts), DUPLICATES_CTGOV),

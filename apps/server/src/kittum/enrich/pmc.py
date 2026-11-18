@@ -26,16 +26,14 @@ BUCKET = "https://pmc-oa-opendata.s3.amazonaws.com"
 _KEY = re.compile(rb"<Key>(metadata/PMC\d+\.\d+\.json)</Key>")
 
 
-def _idconv_url(ids: WorkIds, email: str | None) -> str | None:
+def _idconv_url(ids: WorkIds) -> str | None:
     if ids.pmid:
         params = {"ids": ids.pmid, "idtype": "pmid"}
     elif ids.doi:
         params = {"ids": ids.doi, "idtype": "doi"}
     else:
         return None
-    params |= {"format": "json", "tool": "kittum"}
-    if email:
-        params["email"] = email
+    params |= {"format": "json", "tool": "kittum"}  # the gateway adds `email`
     return f"{IDCONV}?{urlencode(params)}"
 
 
@@ -70,10 +68,10 @@ def _https(s3_url: str) -> str:
     return f"{BUCKET}{split.path}"
 
 
-def find(gateway: Gateway, ids: WorkIds, *, email: str | None = None) -> FullTextLookup | None:
+def find(gateway: Gateway, ids: WorkIds) -> FullTextLookup | None:
     """The PDFs PMC holds for a work, best version first. `None` when there is nothing to ask by."""
     pmcid = ids.pmcid.upper() if ids.pmcid else None
-    asked = _idconv_url(ids, email) if pmcid is None else None
+    asked = _idconv_url(ids) if pmcid is None else None
     if pmcid is None:
         if asked is None:
             return None

@@ -193,8 +193,8 @@ def lookup(
     states = [_State.start(r, carried.get(r.occurrence_id, ())) for r in records]
     _from_openalex(states, gateway, config)
     _from_europepmc(states, gateway, config)
-    _from_crossref(states, gateway, config)
-    _from_unpaywall(states, gateway, config)
+    _from_crossref(states, gateway)
+    _from_unpaywall(states, gateway)
     _from_pubtator(states, gateway, config)
     failures: list[SourceFailure] = []
     for state in states:
@@ -241,7 +241,6 @@ def _from_openalex(states: list[_State], gateway: Gateway, config: EnrichmentCon
             gateway,
             dois=dois,
             pmids=pmids,
-            api_key=config.openalex_api_key,
             batch_size=config.batch_size,
         )
     except SourceUnavailable as error:
@@ -296,7 +295,7 @@ def _from_europepmc(states: list[_State], gateway: Gateway, config: EnrichmentCo
         state.add_locations(work.oa_locations, europepmc.SOURCE)
 
 
-def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
+def _from_crossref(states: list[_State], gateway: Gateway) -> None:
     works: dict[str, crossref.Work | SourceUnavailable | None] = {}
     for state in states:
         if not state.doi or crossref.SOURCE in state.skip:
@@ -304,7 +303,7 @@ def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentCon
         state.ask(crossref.SOURCE)
         if state.doi not in works:
             try:
-                works[state.doi] = crossref.work(gateway, state.doi, email=config.contact_email)
+                works[state.doi] = crossref.work(gateway, state.doi)
             except SourceUnavailable as error:
                 works[state.doi] = error
         work = works[state.doi]
@@ -335,8 +334,8 @@ def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentCon
                 state.note("retraction", openalex.SOURCE)
 
 
-def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
-    if not config.contact_email:
+def _from_unpaywall(states: list[_State], gateway: Gateway) -> None:
+    if not gateway.configured(unpaywall.SOURCE):
         return
     seen: dict[str, OaLocation | SourceUnavailable | None] = {}
     for state in states:
@@ -345,9 +344,7 @@ def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentCo
         state.ask(unpaywall.SOURCE)
         if state.doi not in seen:
             try:
-                seen[state.doi] = unpaywall.best_oa_location(
-                    gateway, state.doi, email=config.contact_email
-                )
+                seen[state.doi] = unpaywall.best_oa_location(gateway, state.doi)
             except SourceUnavailable as error:
                 seen[state.doi] = error
         location = seen[state.doi]

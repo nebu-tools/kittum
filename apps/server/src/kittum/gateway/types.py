@@ -1,8 +1,10 @@
 """Values and seams that cross the gateway boundary."""
 
-import re
-from typing import Protocol
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+import importlib.metadata
+from typing import Literal, Protocol
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
+
+from pydantic import Field
 
 from kittum.core import Record, Sha256
 
@@ -17,20 +19,75 @@ class SourcePolicy(Record):
     terms_url: str
 
 
+def _version() -> str:
+    try:
+        return importlib.metadata.version("kittum-server")
+    except importlib.metadata.PackageNotFoundError:  # pragma: no cover - installed in CI
+        return "0.0.0"
+
+
+def user_agent(contact_email: str | None = None) -> str:
+    """The value sent in `User-Agent`, naming the version and, when one is configured, the
+    contact address."""
+    agent = f"Kittum/{_version()}"
+    if contact_email:
+        agent += f" (+mailto:{contact_email})"
+    return agent
+
+
+class Credential(Record):
+    """One private value placed in a request for the send: a query parameter, a header, or the
+    contact address in the User-Agent (`kittum.gateway.credentials`)."""
+
+    kind: Literal["param", "header", "user_agent"]
+    name: str
+    value: str = Field(repr=False)
+
+
 class HttpRequest(Record):
+    """A request as a caller builds it, without a private value. `credentials` holds the values
+    the gateway attaches for the send; the hash, the cache, recordings, and logs never read it."""
+
     method: str = "GET"
     url: str
     params: tuple[tuple[str, str], ...] = ()
     headers: tuple[tuple[str, str], ...] = ()
     body: bytes | None = None
+    credentials: tuple[Credential, ...] = Field(default=(), exclude=True, repr=False)
+
+    def on_the_wire(self) -> HttpRequest:
+        """The request as a transport sends it: the query in `params` (`effective_request`), the
+        credentials placed, and a User-Agent."""
+        request = effective_request(self)
+        params = (
+            *request.params,
+            *((c.name, c.value) for c in self.credentials if c.kind == "param"),
+        )
+        headers = [
+            *request.headers,
+            *((c.name, c.value) for c in self.credentials if c.kind == "header"),
+        ]
+        if not any(name.lower() == "user-agent" for name, _ in headers):
+            contact = next((c.value for c in self.credentials if c.kind == "user_agent"), None)
+            headers.append(("User-Agent", user_agent(contact)))
+        return HttpRequest(
+            method=request.method,
+            url=request.url,
+            params=params,
+            headers=tuple(headers),
+            body=request.body,
+        )
 
 
 class HttpResponse(Record):
+    """A response. `url` is where it came from after redirects, when the transport knows."""
+
     status: int
     headers: tuple[tuple[str, str], ...]
     body: bytes
     body_hash: Sha256
     from_cache: bool = False
+    url: str | None = None
 
 
 class Transport(Protocol):
@@ -50,48 +107,7 @@ def effective_request(request: HttpRequest) -> HttpRequest:
         return request
     params = tuple(parse_qsl(split.query, keep_blank_values=True)) + tuple(request.params)
     url = urlunsplit((split.scheme, split.netloc, split.path, "", split.fragment))
-    return HttpRequest(
-        method=request.method,
-        url=url,
-        params=params,
-        headers=request.headers,
-        body=request.body,
-    )
-
-
-CREDENTIAL_PARAMS = frozenset({"api_key", "apikey", "key", "token", "access_token"})
-"""Query parameters that carry a credential (NCBI's `api_key`)."""
-
-_CONTACT_PARAMS = frozenset({"email", "mailto"})
-"""Query parameters that carry the contact address (NCBI and Unpaywall's `email`, Crossref and
-OpenAlex's `mailto`)."""
-
-
-def _private(name: str, value: str) -> bool:
-    name = name.lower()
-    return name in _CONTACT_PARAMS or name in CREDENTIAL_PARAMS or (name == "tool" and "@" in value)
-
-
-def public_url(url: str) -> str:
-    """`url` as Kittum stores and logs it: without the contact address (`email`, `mailto`, and a
-    `tool` that holds an address), credentials, or user info. A URL with none of them comes back
-    as it is."""
-    split = urlsplit(url)
-    pairs = parse_qsl(split.query, keep_blank_values=True)
-    kept = [(n, v) for n, v in pairs if not _private(n, v)]
-    netloc = split.netloc.rpartition("@")[2]
-    if len(kept) == len(pairs) and netloc == split.netloc:
-        return url
-    query = urlencode(kept, quote_via=quote)
-    return urlunsplit((split.scheme, netloc, split.path, query, split.fragment))
-
-
-_URL = re.compile(r"https?://[^\s'\"<>]+")
-
-
-def public_text(text: str) -> str:
-    """`text` with every URL in it as `public_url` gives it: for messages and log lines."""
-    return _URL.sub(lambda m: public_url(m.group()), text)
+    return request.model_copy(update={"url": url, "params": params})
 
 
 class Gateway(Protocol):
@@ -99,14 +115,19 @@ class Gateway(Protocol):
         self, source: str, request: HttpRequest, *, use_cache: bool = True
     ) -> HttpResponse: ...
 
+    def configured(self, source: str) -> bool:
+        """Whether the deployment has every setting `source` requires (an API key, the contact
+        address), so asking it can succeed."""
+        ...
+
 
 __all__ = [
-    "CREDENTIAL_PARAMS",
+    "Credential",
     "Gateway",
     "HttpRequest",
     "HttpResponse",
     "SourcePolicy",
     "Transport",
-    "public_text",
-    "public_url",
+    "effective_request",
+    "user_agent",
 ]

@@ -87,6 +87,9 @@ class ReplayGateway:
         body = (DATA / name).read_bytes()
         return HttpResponse(status=200, headers=(), body=body, body_hash=sha256_hex(body))
 
+    def configured(self, source: str) -> bool:  # noqa: ARG002
+        return True
+
 
 _TITLE = re.compile(r"^Title: (.*)$", re.MULTILINE)
 

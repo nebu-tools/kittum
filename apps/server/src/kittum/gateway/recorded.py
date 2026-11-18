@@ -12,15 +12,14 @@ unreachable source would, so a stack that serves the gateway from recordings
 (`KITTUM_GATEWAY_RECORDINGS`) never touches the network.
 
 `RecordingTransport` writes that directory from a live run (`KITTUM_GATEWAY_RECORD`), each attempt
-in order. It keys each response by `recording_key`: the URL and query without credential
-parameters, and with the contact address replaced by `CONTACT_PLACEHOLDER` in the parameter each
-source takes it in (`CONTACT_PARAMS`). It refuses, before anything is sent, a URL with user info
-or a configured secret or the contact address anywhere else, naming where but not the value. A
-response body that holds a secret or the address is cleaned (`[redacted]`, the placeholder), and
-the live run gets the cleaned response too, so the live run and its replay see the same bytes and
-hashes. Request headers, where API keys travel, are never written. Of the response headers only
-`Content-Type` is kept: nothing downstream of the gateway reads another, and replaying a source's
-rate-limit headers offline would only slow the replay down.
+in order. It keys each response by `recording_key`: the URL and query as the caller built them,
+which hold no private value, as the gateway attaches those only for the send. It refuses, before
+anything is sent, a URL with user info or with a configured private value anywhere, naming where
+but not the value. A response passes `Credentials.scrub`, and the live run gets the scrubbed
+response too, so the live run and its replay see the same bytes and hashes. Request headers,
+where API keys travel, are never written. Of the response headers only `Content-Type` is kept:
+nothing downstream of the gateway reads another, and replaying a source's rate-limit headers
+offline would only slow the replay down.
 """
 
 import builtins
@@ -28,41 +27,23 @@ import contextlib
 import fcntl
 import json
 import os
-import re
 import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote, quote_plus, urlencode, urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx2
 
 from kittum.core import sha256_hex
+from kittum.gateway.credentials import NO_CREDENTIALS, Credentials
 from kittum.gateway.errors import GatewayError
-from kittum.gateway.types import (
-    CREDENTIAL_PARAMS,
-    HttpRequest,
-    HttpResponse,
-    effective_request,
-    public_url,
-)
+from kittum.gateway.types import HttpRequest, HttpResponse, effective_request
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable
+    from collections.abc import Generator
     from pathlib import Path
 
     from kittum.gateway.types import Transport
-
-CONTACT_PLACEHOLDER = "contact@example.invalid"
-"""Stands for the deployment's contact address in every recording."""
-
-CONTACT_PARAMS = {
-    "api.unpaywall.org": "email",
-    "api.crossref.org": "mailto",
-    "eutils.ncbi.nlm.nih.gov": "email",
-    "api.openalex.org": "mailto",
-    "pmc.ncbi.nlm.nih.gov": "email",
-}
-"""The query parameter each source takes the contact address in, by host."""
 
 
 _EXTENSIONS = {"application/json": ".json", "application/pdf": ".pdf", "text/html": ".html"}
@@ -76,60 +57,24 @@ class RecordingRefused(GatewayError):
     """Recording the request would write a secret or the contact address down."""
 
 
-def _spellings(value: str) -> tuple[str, ...]:
-    """`value` as it may appear in a URL or a body: plain, and percent-encoded both ways."""
-    return tuple(dict.fromkeys((quote_plus(value), quote(value, safe=""), value)))
+def recording_key(request: HttpRequest, credentials: Credentials = NO_CREDENTIALS) -> str:
+    """The manifest key of `request`: its URL and query as the caller built them.
 
-
-def _pattern(values: Iterable[str]) -> re.Pattern[bytes] | None:
-    spellings = sorted({s for v in values for s in _spellings(v)}, key=len, reverse=True)
-    if not spellings:
-        return None
-    return re.compile(b"|".join(re.escape(s.encode()) for s in spellings), re.IGNORECASE)
-
-
-def _holds(text: str, value: str) -> bool:
-    folded = text.lower()
-    return any(s.lower() in folded for s in _spellings(value))
-
-
-def recording_key(
-    request: HttpRequest, contact_email: str | None = None, secrets: Iterable[str] = ()
-) -> str:
-    """The manifest key of `request`: its URL and query, safe to write down.
-
-    Credential parameters are dropped and the contact address in its source's contact parameter
-    becomes `CONTACT_PLACEHOLDER`, so a replay with any contact address finds the key. A URL with
-    user info, or with the address or one of `secrets` anywhere else, raises `RecordingRefused`.
-    """
+    A URL with user info, or with one of the configured private values anywhere, raises
+    `RecordingRefused`: no caller puts one there, so one that does is a bug to stop at."""
     request = effective_request(request)
     split = urlsplit(request.url)
     if "@" in split.netloc:
         raise RecordingRefused(f"{split.hostname}: the URL carries user info")
-    contact_param = CONTACT_PARAMS.get(split.hostname or "")
-    params = []
-    for name, value in request.params:
-        if name.lower() in CREDENTIAL_PARAMS:
-            continue
-        if contact_email and name == contact_param and value.lower() == contact_email.lower():
-            value = CONTACT_PLACEHOLDER
-        params.append((name, value))
-    sensitive = [s for s in (contact_email, *secrets) if s]
-    for value in sensitive:
-        where = next((f"parameter {n!r}" for n, v in params if _holds(v, value)), None)
-        if where is None and _holds(request.url, value):
-            where = "the path"
-        if where is not None:
-            raise RecordingRefused(
-                f"{split.hostname}: {where} carries a configured secret or the contact address"
-            )
-    return request.url + ("?" + urlencode(params) if params else "")
+    key = request.url + ("?" + urlencode(request.params) if request.params else "")
+    if credentials.holds(key.encode()):
+        raise RecordingRefused(f"{split.hostname}: the URL carries a configured private value")
+    return key
 
 
 class RecordedTransport:
-    def __init__(self, directory: Path, *, contact_email: str | None = None) -> None:
+    def __init__(self, directory: Path) -> None:
         manifest = json.loads((directory / "manifest.json").read_text())
-        self._contact_email = contact_email
         # A list answers in order, once each; a single entry answers every time.
         self._responses: dict[str, tuple[list[_Entry], bool]] = {}
         for url, entry in manifest.items():
@@ -144,22 +89,18 @@ class RecordedTransport:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         self.sent.append(request)
-        key = request.url if not request.params and request.url in self._responses else None
-        if key is None:
-            try:
-                key = recording_key(request, self._contact_email)
-            except RecordingRefused:
-                key = None
-        if key is None or key not in self._responses:
-            raise NotRecorded(f"no recorded response for {public_url(request.url)}")
+        # A hand-made manifest may key a URL exactly as a caller wrote it.
+        raw = not request.params and request.url in self._responses
+        key = request.url if raw else recording_key(request)
+        if key not in self._responses:
+            raise NotRecorded(f"no recorded response for {key}")
         entries, in_order = self._responses[key]
         with self._lock:
             number = self._used[key]
             self._used[key] += 1
         if in_order and number >= len(entries):
             raise NotRecorded(
-                f"no recorded response {number + 1} for {public_url(request.url)}"
-                f" (the recording has {len(entries)})"
+                f"no recorded response {number + 1} for {key} (the recording has {len(entries)})"
             )
         entry = entries[number if in_order else 0]
         if isinstance(entry, BaseException):
@@ -207,8 +148,7 @@ class RecordingTransport:
     """Sends through `inner` and writes every response it gets into `directory`, in the format
     `RecordedTransport` reads, in the order they came, each attempt of a retried request included.
 
-    `secrets` are the values no recording may hold: the deployment's API keys, tokens, and
-    passwords. The manifest is merged under a file lock and replaced atomically after every
+    `credentials` are the values no recording may hold. The manifest is merged under a file lock and replaced atomically after every
     response, so the server and its workers can record into one directory and a crash keeps what
     came before it.
     """
@@ -218,40 +158,25 @@ class RecordingTransport:
         inner: Transport,
         directory: Path,
         *,
-        contact_email: str | None = None,
-        secrets: Iterable[str | None] = (),
+        credentials: Credentials = NO_CREDENTIALS,
     ) -> None:
         self._inner = inner
         self._directory = directory
-        self._contact_email = contact_email
-        self._secrets = tuple(s for s in secrets if s)
-        self._redact = _pattern(self._secrets)
-        self._contact = _pattern([contact_email] if contact_email else [])
+        self._credentials = credentials
         self._lock = threading.Lock()
         directory.mkdir(parents=True, exist_ok=True)
 
     def send(self, request: HttpRequest) -> HttpResponse:
-        key = recording_key(request, self._contact_email, self._secrets)
+        key = recording_key(request, self._credentials)
         try:
             response = self._inner.send(request)
         except Exception as error:
             # Only the kind: a message may quote the URL, and with it the contact address.
             self._append(key, {"error": type(error).__name__})
             raise
-        body = self._clean(response.body)
-        if body != response.body:
-            response = response.model_copy(update={"body": body, "body_hash": sha256_hex(body)})
+        response = self._credentials.scrub(response)
         self._write(key, response)
         return response
-
-    def _clean(self, body: bytes) -> bytes:
-        if self._redact is not None:
-            body = self._redact.sub(b"[redacted]", body)
-        if self._contact is not None:
-            placeholder = quote_plus(CONTACT_PLACEHOLDER).encode()
-            plain = CONTACT_PLACEHOLDER.encode()
-            body = self._contact.sub(lambda m: placeholder if b"%" in m[0] else plain, body)
-        return body
 
     def _write(self, key: str, response: HttpResponse) -> None:
         content_type = next(
@@ -291,8 +216,6 @@ def _write_atomic(path: Path, data: bytes) -> None:
 
 
 __all__ = [
-    "CONTACT_PARAMS",
-    "CONTACT_PLACEHOLDER",
     "NotRecorded",
     "RecordedTransport",
     "RecordingRefused",

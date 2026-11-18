@@ -29,11 +29,11 @@ from kittum.app import (
     build_gateway,
     build_judge,
     create_project,
+    credentials,
     ingest_corpus,
     job_handlers,
     open_screening,
     publish_protocol,
-    recording_secrets,
     request_enrichment,
 )
 from kittum.app.demo import DATA, PROTOCOL, SCOPE, SENTINELS
@@ -54,7 +54,6 @@ from kittum.settings import LlmEndpoint, Settings
 from kittum.storage import FilesystemStore
 from tests.app.record_stack import STACK
 from tests.app.test_hosted_model import RECIPES
-from tests.enrich.support import CONTACT_EMAIL
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -72,7 +71,7 @@ _TIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d
 
 
 class LiveSources:
-    """The real sources, as recorded for the stack under the test address, asked with ours."""
+    """The real sources, as recorded for the stack, asked with our address and key attached."""
 
     def __init__(self) -> None:
         self._recorded = RecordedTransport(STACK)
@@ -80,8 +79,7 @@ class LiveSources:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         self.sent.append(request)
-        url = request.url.replace(quote_plus(PERSONAL), quote_plus(CONTACT_EMAIL))
-        return self._recorded.send(request.model_copy(update={"url": url}))
+        return self._recorded.send(request)
 
 
 class HostedJudge:
@@ -228,8 +226,10 @@ def test_a_recorded_live_run_replays_offline_to_the_same_rows_and_ledger(
         client=httpx2.Client(transport=httpx2.MockTransport(model)),
     )
     # The live run asked the sources with the address and the key, and the model with its key.
-    assert any(quote_plus(PERSONAL) in r.url for r in sources.sent)
-    assert any(("Authorization", f"Bearer {OPENALEX_KEY}") in r.headers for r in sources.sent)
+    wire = [r.on_the_wire() for r in sources.sent]
+    assert any(("mailto", PERSONAL) in w.params for w in wire)
+    assert any(("Authorization", f"Bearer {OPENALEX_KEY}") in w.headers for w in wire)
+    assert not any(PERSONAL in r.url or OPENALEX_KEY in str(r.headers) for r in sources.sent)
     assert model.seen and all(r.headers["authorization"] == f"Bearer {LLM_KEY}" for r in model.seen)
     (run,) = recorded["enrichment_run"]
     assert run["finished_at"] == "<time>" and len(recorded["record_enrichment"]) == run["records"]
@@ -376,12 +376,12 @@ def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path
     )
     build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
     sources = RecordingTransport(
-        FakeTransport(), tmp_path / "sources", secrets=recording_secrets(settings)
+        FakeTransport(), tmp_path / "sources", credentials=credentials(settings)
     )
     efetch = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     pubmed = HttpRequest(url=efetch, params=(("id", "32450107"), ("tool", "kittum")))
     assert sources.send(pubmed).status == 404  # recorded, whatever PubMed said
-    with pytest.raises(RecordingRefused, match="parameter 'term'"):
+    with pytest.raises(RecordingRefused, match="configured private value"):
         sources.send(HttpRequest(url=efetch, params=(("term", password),)))
 
     answer = {"model": "served", "choices": [{"message": {"content": "{}"}}]}

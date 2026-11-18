@@ -24,7 +24,7 @@ from kittum.enrich import (
 from kittum.gateway import HttpRequest, HttpResponse, RecordedTransport
 from kittum.gateway.testing import PassThroughGateway, response
 from kittum.search import SourceRecord
-from tests.enrich.support import CONTACT_EMAIL, FIXTURES
+from tests.enrich.support import CREDENTIALS, FIXTURES
 from tests.enrich.support import config as enrichment_config
 
 STACK = FIXTURES / "stack"
@@ -90,13 +90,13 @@ def test_an_answer_for_another_work_is_a_failure_and_none_of_it_is_used() -> Non
             entry["pmid"], entry["pmcid"] = VITAMIN_C_PMID, VITAMIN_C_PMCID
     swapped = Swapped(
         {
-            crossref._url(LESOTHO, CONTACT_EMAIL): _body(crossref._url(VITAMIN_C, CONTACT_EMAIL)),
-            unpaywall._url(LESOTHO, CONTACT_EMAIL): _body(unpaywall._url(VITAMIN_C, CONTACT_EMAIL)),
+            crossref._url(LESOTHO): _body(crossref._url(VITAMIN_C)),
+            unpaywall._url(LESOTHO): _body(unpaywall._url(VITAMIN_C)),
             _epmc_url(): json.dumps(epmc).encode(),
         }
     )
     lesotho, vitamin_c = lookup(
-        RECORDS, PassThroughGateway(swapped), config=enrichment_config()
+        RECORDS, PassThroughGateway(swapped, CREDENTIALS), config=enrichment_config()
     ).records
 
     reasons = {f.source: f.reason for f in lesotho.failures}
@@ -118,12 +118,12 @@ def test_an_answer_for_another_work_is_a_failure_and_none_of_it_is_used() -> Non
 
 
 def _crossref_links(message_edit) -> tuple:
-    body = json.loads(_body(crossref._url(LESOTHO, CONTACT_EMAIL)))
+    body = json.loads(_body(crossref._url(LESOTHO)))
     message_edit(body["message"])
     gateway = PassThroughGateway(
-        Swapped({crossref._url(LESOTHO, CONTACT_EMAIL): json.dumps(body).encode()})
+        Swapped({crossref._url(LESOTHO): json.dumps(body).encode()}), CREDENTIALS
     )
-    work = crossref.work(gateway, LESOTHO, email=CONTACT_EMAIL)
+    work = crossref.work(gateway, LESOTHO)
     assert work is not None
     return work.pdf_links
 
@@ -182,7 +182,7 @@ DRESSES = {
 
 @pytest.mark.parametrize("dress", DRESSES.values(), ids=DRESSES.keys())
 def test_a_doi_in_any_dress_is_the_same_work_to_every_source(dress) -> None:
-    gateway = PassThroughGateway(RecordedTransport(STACK))
+    gateway = PassThroughGateway(RecordedTransport(STACK), CREDENTIALS)
     bare = lookup(RECORDS, gateway, config=enrichment_config()).records
     dressed = tuple(r.model_copy(update={"doi": dress(r.doi)}) for r in RECORDS)
     found = lookup(dressed, gateway, config=enrichment_config()).records
@@ -207,8 +207,8 @@ def test_a_doi_in_any_dress_is_the_same_work_to_every_source(dress) -> None:
     # The clients that compare an answer with the DOI asked about take any dress too.
     for record in dressed:
         assert record.doi is not None
-        assert crossref.work(gateway, record.doi, email=CONTACT_EMAIL) is not None
-        assert unpaywall.best_oa_location(gateway, record.doi, email=CONTACT_EMAIL) is not None
+        assert crossref.work(gateway, record.doi) is not None
+        assert unpaywall.best_oa_location(gateway, record.doi) is not None
 
 
 def test_a_prefixed_doi_with_its_pmid_keeps_its_abstract_and_fails_no_source() -> None:
@@ -225,7 +225,9 @@ def test_a_prefixed_doi_with_its_pmid_keeps_its_abstract_and_fails_no_source() -
     # the same two works (the PMID request was not recorded, the DOI request was).
     by_doi = _body(openalex._url(f"doi:{LESOTHO}|{VITAMIN_C}"))
     swapped = Swapped({openalex._url(f"pmid:42174613|{VITAMIN_C_PMID}"): by_doi})
-    lesotho, _ = lookup(records, PassThroughGateway(swapped), config=enrichment_config()).records
+    lesotho, _ = lookup(
+        records, PassThroughGateway(swapped, CREDENTIALS), config=enrichment_config()
+    ).records
     assert lesotho.failures == ()
     assert lesotho.doi == LESOTHO
     assert lesotho.abstract == abstract

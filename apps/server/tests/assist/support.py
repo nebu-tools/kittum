@@ -9,7 +9,7 @@ import yaml
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTS = FIXTURES / "counts"
 STACK = Path(__file__).parents[1] / "enrich" / "fixtures" / "stack"
-CONTACT_EMAIL = "test@kittum.dev"  # the e2e stack's address; recordings carry it in their URLs
+CONTACT_EMAIL = "librarian@example.org"  # the gateway attaches it; no recording holds it
 
 DESCRIPTION = (
     "Does nicotine replacement therapy (any form: patch, gum, lozenge, inhaler, nasal or mouth "

@@ -1,7 +1,13 @@
 import httpx2
 
 from kittum.core import sha256_hex
-from kittum.gateway import HttpRequest, HttpxTransport, default_policies, request_hash
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    HttpxTransport,
+    default_policies,
+    request_hash,
+)
 
 PUBLISHED_PER_SECOND = {
     "pubmed": 3,
@@ -35,7 +41,9 @@ def test_default_policies_sit_ten_percent_under_published_limits() -> None:
 
 
 def test_a_contact_email_unlocks_the_faster_pools() -> None:
-    polite = default_policies(contact_email="librarian@example.org", ncbi_api_key="key")
+    polite = default_policies(
+        Credentials.of(contact_email="librarian@example.org", ncbi_api_key="key")
+    )
     public = default_policies()
 
     assert polite["crossref"].requests_per_second > public["crossref"].requests_per_second
@@ -51,11 +59,11 @@ def test_transport_sends_the_version_and_contact_as_user_agent() -> None:
         return httpx2.Response(200, content=b"hello")
 
     client = httpx2.Client(transport=httpx2.MockTransport(handler))
-    transport = HttpxTransport(contact_email="librarian@example.org", client=client)
+    transport = HttpxTransport(client=client)
+    credentials = Credentials.of(contact_email="librarian@example.org")
+    request = HttpRequest(url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
 
-    response = transport.send(
-        HttpRequest(url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi")
-    )
+    response = transport.send(credentials.attach("pubmed", request))
 
     assert response.status == 200
     assert response.body == b"hello"

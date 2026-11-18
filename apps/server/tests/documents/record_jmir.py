@@ -20,8 +20,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from kittum.enrich import EnrichmentConfig, WorkIds, lookup_full_text
-from kittum.gateway import HttpRequest, HttpxTransport, RecordingTransport
+from kittum.enrich import WorkIds, lookup_full_text
+from kittum.gateway import Credentials, HttpRequest, HttpxTransport, RecordingTransport
 from kittum.gateway.testing import PassThroughGateway
 from tests.enrich.support import CONTACT_EMAIL
 
@@ -39,16 +39,14 @@ ARTICLE = "https://pmc-oa-opendata.s3.amazonaws.com/PMC11951811.1/PMC11951811.1.
 def main(live_run: Path) -> None:
     JMIR.mkdir(exist_ok=True)
     recorded = json.loads((live_run / "manifest.json").read_text())
-    transport = RecordingTransport(
-        HttpxTransport(contact_email=CONTACT_EMAIL), JMIR, contact_email=CONTACT_EMAIL
-    )
-    gateway = PassThroughGateway(transport)
-    config = EnrichmentConfig(
+    credentials = Credentials.of(
         contact_email=CONTACT_EMAIL,
         semantic_scholar_api_key=os.environ.get("KITTUM_SEMANTIC_SCHOLAR_API_KEY"),
     )
+    transport = RecordingTransport(HttpxTransport(), JMIR, credentials=credentials)
+    gateway = PassThroughGateway(transport, credentials)
     for source in ("pmc", "semanticscholar"):
-        lookup_full_text(gateway, source, WorkIds(doi=DOI, pmid=PMID), config=config)
+        lookup_full_text(gateway, source, WorkIds(doi=DOI, pmid=PMID))
     gateway.fetch("pmc", HttpRequest(url=ARTICLE))
     manifest = json.loads((JMIR / "manifest.json").read_text())
     for url, name in ((UNPAYWALL, "unpaywall-10.2196-66709.json"), (CHECKLIST, "app2.pdf")):

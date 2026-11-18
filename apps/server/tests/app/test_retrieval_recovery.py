@@ -26,7 +26,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 import httpx2
@@ -41,7 +41,13 @@ from kittum.app import FULL_TEXT_DETACHED, job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL
 from kittum.core import FixedClock, new_id
 from kittum.corpus import latest_revision, reports
-from kittum.gateway import HttpRequest, HttpxTransport, RecordedTransport, SourceGateway
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    HttpxTransport,
+    RecordedTransport,
+    SourceGateway,
+)
 from kittum.gateway.testing import response
 from kittum.ledger import EventDraft, PostgresLedger, SigningKey
 from kittum.report import load_review, seal_bundle
@@ -69,7 +75,7 @@ CHECKLIST = (PDF_FIXTURES / "jmir" / "app2.pdf").read_bytes()
 
 
 UPLOAD_LIMIT = 2_000_000
-UNPAYWALL = "https://api.unpaywall.org/v2/{}?email=test%40kittum.dev"
+UNPAYWALL = "https://api.unpaywall.org/v2/{}"
 IDCONV = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 
 
@@ -89,7 +95,8 @@ class Sources:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         if self.unpaywall_quotes_request and request.url.startswith("https://api.unpaywall.org/"):
-            raise ConnectionError(f"{request.url} did not answer")
+            wire = request.on_the_wire()
+            raise ConnectionError(f"{wire.url}?{urlencode(wire.params)} did not answer")
         if self.unpaywall_swapped and request.url == UNPAYWALL.format(
             "10.1186%2Fs12916-026-04943-4"
         ):
@@ -127,6 +134,7 @@ class Review:
             gateway=SourceGateway(
                 database=db,
                 transport=sources,
+                credentials=Credentials.of(contact_email=CONTACT_EMAIL),
                 artifacts=artifacts,
                 buckets="memory",
                 cache="memory",
@@ -643,26 +651,37 @@ def test_the_contact_address_stays_out_of_what_kittum_keeps_and_logs(
     review.post("retrieval/open-access")
     assert review.work() == 1
 
-    # Unpaywall's failure quotes the request it failed for. Without Europe PMC there is no PMCID,
-    # so retrieval asks PubMed Central's ID converter, with the address. The run reports keep both
-    # requests, without it.
+    # Unpaywall's failure quotes the request it was sent, with the address. Without Europe PMC
+    # there is no PMCID, so retrieval asks PubMed Central's ID converter, with the address. The
+    # run reports keep the failure in plain words and the converter's request, without it.
     run = review.get("enrichment/runs/latest")
     reason = {s["source"]: s for s in run["sources"]}["unpaywall"]["last_failure"]["reason"]
-    assert reason.startswith("ConnectionError: https://api.unpaywall.org/v2/10.")
-    assert reason.endswith(" did not answer")
+    # The attempt's own error text is checked in tests/gateway/test_private_values.py: here every
+    # transaction is a savepoint of the test's, and the failed enrichment step rolls it back.
+    assert reason == "unpaywall is unreachable: the connection broke off (ConnectionError)"
     attempts = [
         a for r in review.get("retrieval/open-access/latest")["reports"] for a in r["attempts"]
     ]
     assert any(a["url"].startswith(f"{IDCONV}?ids=") for a in attempts)
     assert all("tool=kittum" in a["url"] for a in attempts if a["url"].startswith(IDCONV))
 
-    # httpx2 logs each request it sends.
-    live = httpx2.Client(transport=httpx2.MockTransport(lambda _: httpx2.Response(404)))
-    HttpxTransport(client=live).send(HttpRequest(url=UNPAYWALL.format(LESOTHO_DOI)))
-    assert f"GET https://api.unpaywall.org/v2/{LESOTHO_DOI} " in caplog.text
+    # httpx2 would log the request as it went out, with the address; it logs nothing below
+    # WARNING, and the gateway's own line names the request without it.
+    seen: list[str] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        seen.append(str(request.url))
+        return httpx2.Response(404)
+
+    live = httpx2.Client(transport=httpx2.MockTransport(answer))
+    credentials = Credentials.of(contact_email=CONTACT_EMAIL)
+    sent = credentials.attach("unpaywall", HttpRequest(url=UNPAYWALL.format(LESOTHO_DOI)))
+    HttpxTransport(client=live).send(sent)
+    assert seen == [f"{UNPAYWALL.format(LESOTHO_DOI)}?email={quote(CONTACT_EMAIL)}"]
+    assert not [r for r in caplog.records if r.name.startswith(("httpx2", "httpcore"))]
 
     # A job the gateway fails for: the worker logs it, and the job keeps the error.
-    asked = f"{IDCONV}?ids=0&format=json&tool=kittum&email={quote(CONTACT_EMAIL)}"
+    asked = f"{IDCONV}?ids=0&format=json&tool=kittum"
     gateway = review.ctx.gateway
     assert gateway is not None
 
