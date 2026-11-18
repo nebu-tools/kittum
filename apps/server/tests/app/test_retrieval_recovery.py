@@ -41,7 +41,6 @@ from kittum.app import FULL_TEXT_DETACHED, job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL
 from kittum.core import FixedClock, new_id
 from kittum.corpus import latest_revision, reports
-from kittum.enrich.pmc import IDCONV
 from kittum.gateway import HttpRequest, HttpxTransport, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
 from kittum.ledger import EventDraft, PostgresLedger, SigningKey
@@ -71,6 +70,7 @@ CHECKLIST = (PDF_FIXTURES / "jmir" / "app2.pdf").read_bytes()
 
 UPLOAD_LIMIT = 2_000_000
 UNPAYWALL = "https://api.unpaywall.org/v2/{}?email=test%40kittum.dev"
+IDCONV = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
 
 
 class Sources:
