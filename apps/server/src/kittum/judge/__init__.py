@@ -17,8 +17,9 @@ version its config names: a config keeps the prompt it was registered with (`jud
 and `config_prompt_version` says which version it renders with. `register_config` records a
 config when a stage that names it opens; `judge_many` refuses a config that is not registered as
 it is. Callers that know the criteria's search topic pass their permanent numbers (`numbers`),
-which `judge.v3` headings show. A topic's `JudgeInstructions` edit the prompt; `prompt_template` gives the fixed parts around them for the protocol editor, and
-`instructions_hash` names the wording they select for the AI disclosure.
+which `judge.v3` headings show. A topic's `JudgeInstructions` edit the prompt; `prompt_template`
+gives the fixed parts around them for the protocol editor, and `instructions_hash` names the
+wording they select for the AI disclosure.
 `VERIFIER_LIMITS` lists what the filter cannot catch, for the AI disclosure.
 
 `judge_metrics`, `pair_metrics`, and `fleiss_kappa` measure judges on gold data: recall,
