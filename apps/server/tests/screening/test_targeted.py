@@ -21,6 +21,7 @@ from tests.screening.support import (
     STAGE,
     build_world,
     recorded_backend,
+    register_judge,
     timing,
 )
 
@@ -36,6 +37,7 @@ pytestmark = pytest.mark.postgres
 def open_s(world: World, pool: tuple[Id, ...], reveal: str = "before") -> StageInfo:
     """Open the S stage and enqueue the judge, without running it."""
     with world.db.transaction() as tx:
+        register_judge(tx)
         info = world.screening.open_stage(
             tx,
             command_id=new_id(),
@@ -244,6 +246,7 @@ def test_complete_topics_refuse_what_only_working_topics_allow(database: Databas
 
     s = build_world(database, "S")
     with s.db.transaction() as tx, pytest.raises(InvalidDecision, match="no auditor"):
+        register_judge(tx)
         s.screening.open_stage(
             tx,
             command_id=new_id(),

@@ -608,7 +608,7 @@ create table screening_stage (
     stage text not null check (stage in ('title_abstract', 'full_text')),
     mode text not null check (mode in ('M1', 'M2', 'M3', 'S')),
     reveal text not null check (reveal in ('never', 'on_disagreement', 'always', 'before')),
-    judge_config_id text not null,
+    judge_config_id text not null references judge_config (id),
     seed text not null,
     screeners uuid[] not null,
     auditor_id uuid references actor (id),

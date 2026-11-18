@@ -15,7 +15,7 @@ from kittum.ledger import SigningKey
 from kittum.report import RightsProfile, load_review, render_files, seal_bundle
 from kittum.screening import StageSpec
 from tests.report.support import NRT_SCOPE
-from tests.screening.support import SENTINELS
+from tests.screening.support import SENTINELS, register_judge
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -310,6 +310,7 @@ def test_a_bundle_at_an_old_cutoff_names_no_one_from_a_later_stage(
             ).fetchone()["id"]  # type: ignore[index]
             for role in ("screener-c", "screener-d", "auditor-2", "adjudicator-2")
         ]
+        register_judge(tx, world.config)
         world.screening.open_stage(
             tx,
             command_id=new_id(),

@@ -38,6 +38,7 @@ from kittum.corpus import (
 )
 from kittum.documents import PyMuPDFParser, derive, get_document, get_layer
 from kittum.documents import ingest as ingest_pdf
+from kittum.judge import register_config
 from kittum.ledger import EventDraft
 from kittum.people import Member, MemberRole, is_lead, members, record_roles
 from kittum.protocol import (
@@ -784,6 +785,8 @@ def open_screening(
             sentinels = sentinels or full_text_sentinels(tx, project_id, ctx.artifacts)
     if not records:
         raise LifecycleError(f"there are no records to screen at {stage}")
+    # The stage names its judge config; it is registered here, in the stage's transaction.
+    register_config(tx, ctx.judge.config, ctx.judge.recipe, ctx.clock)
     info = screening.open_stage(
         tx,
         command_id=new_id(),

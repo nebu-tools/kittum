@@ -9,7 +9,7 @@ and the auditor (whose full-text audit sample it is) include it. The lead reques
 The lead traces the trial from the searches to the accepted value. Then someone with the database
 superuser's rights edits the ledger, step by step as an attacker covering their tracks would, and
 the audit check names each edit with the check it fails, while a bundle sealed before the edits
-still verifies offline and no new bundle can be sealed. Runs on a rolled-back connection, with the
+still verifies offline and no new bundle can be sealed. Runs on a rolled-back connection to a database of its own, with the
 recorded judge and the Janus path in a worker on the same connection.
 """
 
@@ -27,6 +27,7 @@ from kittum.app import job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL, demo_judge
 from kittum.cli import main
 from kittum.core import new_id
+from kittum.db.testing import rollback_tx
 from kittum.ledger import PostgresLedger, event_hash, payload_hash
 from kittum.models import ModelRegistry
 from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
@@ -36,12 +37,21 @@ from tests.documents.conftest import savepoint_db
 from tests.extraction.support import schema
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
-    from kittum.db import Tx
+    from kittum.db import Database, Tx
 
 pytestmark = pytest.mark.postgres
+
+
+@pytest.fixture
+def pg(empty_database: Database) -> Iterator[Tx]:  # noqa: ARG001 - points KITTUM_DATABASE_URL at it
+    """A rolled-back connection to a database of the test's own: the bundles sealed here prove
+    only what this review put there."""
+    with rollback_tx() as tx:
+        yield tx
+
 
 SENTINELS = PROTOCOL.parents[1] / "sentinels" / "nicotine-replacement.yaml"
 LESOTHO = PDFS / "gerber2026-lesotho-t2d-crct.pdf"

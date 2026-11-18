@@ -15,6 +15,7 @@ from tests.screening.support import (
     STAGE,
     build_world,
     recorded_backend,
+    register_judge,
 )
 
 if TYPE_CHECKING:
@@ -56,6 +57,7 @@ def test_judge_jobs_run_through_the_worker_once(database: Database) -> None:
         world.ledger, PostgresJobQueue(), PostgresReceipts(), judge_batch_size=8
     )
     with world.db.transaction() as tx:
+        register_judge(tx)
         info = world.screening.open_stage(
             tx,
             command_id=new_id(),

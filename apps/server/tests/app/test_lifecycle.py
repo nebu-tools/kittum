@@ -2,10 +2,11 @@
 
 The steps the demo seed takes in one call, taken one route at a time as an integrator would:
 the project and its people, the protocol, two file imports, the corpus, and a title and abstract
-stage. (Full texts are left to the end-to-end test: the documents tests expect an empty document
-table in the shared test database.) The worker runs the stage's judge jobs on the recorded answers; a worker
-whose judge is a different one refuses them before any model call, and one whose judge is the same
-model under a newer prompt version judges with the prompt the stage was opened with.
+stage. (Full texts are left to the end-to-end test.) It runs on a database created empty from
+the schema file, so the stage's judge config is there only because opening the stage put it
+there. The worker runs the stage's judge jobs on the recorded answers; a worker whose judge is a
+different one refuses them before any model call, and one whose judge is the same model under a
+newer prompt version judges with the prompt the stage was opened with.
 """
 
 from dataclasses import replace
@@ -54,7 +55,8 @@ def _run_jobs(ctx: AppContext) -> int:
     return ran
 
 
-def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: Path) -> None:
+def test_a_project_from_nothing_to_an_open_stage(empty_database: Database, tmp_path: Path) -> None:
+    database = empty_database
     registry = ModelRegistry.load()
     ctx = _context(database, tmp_path, demo_judge(registry))
     client = TestClient(create_app(ctx))

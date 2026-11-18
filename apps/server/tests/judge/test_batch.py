@@ -72,7 +72,12 @@ def _run(
     store: MemoryStore,
     ids: tuple[Any, Any],
     config: JudgeConfig = CONFIG,
+    *,
+    register: bool = True,
 ) -> list[Any]:
+    # A stage registers its config when it opens; these batches judge without a stage.
+    if register:
+        register_config(pg, config, RECIPE, FixedClock(datetime(2026, 10, 28, tzinfo=UTC)))
     return judge_many(
         pg,
         ITEMS,
@@ -155,6 +160,14 @@ def test_a_new_seed_is_a_new_cache_key_and_a_reused_config_id_is_refused(pg: Tx)
 
     with pytest.raises(JudgeConfigConflict, match="decoding"):
         _run(pg, RecordedBackend(), ledger, store, ids, CONFIG.model_copy(update={"seed": 5}))
+    # Judging never registers: a config it was not registered as, or none at all, is refused
+    # before any model call.
+    changed = CONFIG.model_copy(update={"seed": 5})
+    with pytest.raises(JudgeConfigConflict, match="decoding"):
+        _run(pg, RecordedBackend(), ledger, store, ids, changed, register=False)
+    unknown = CONFIG.model_copy(update={"id": "never-opened"})
+    with pytest.raises(JudgeConfigConflict, match="not registered"):
+        _run(pg, RecordedBackend(), ledger, store, ids, unknown, register=False)
 
     reseeded = CONFIG.model_copy(update={"id": "qwen-ta-v1-seed5", "seed": 5})
     backend = RecordedBackend(default='{"not": "valid"}')
@@ -332,6 +345,7 @@ def test_a_judge_v2_config_keeps_its_prompt_and_a_judge_v3_config_states_the_rul
     v3 = JudgeConfig(id="qwen-ta-v3", model_id=CONFIG.model_id, prompt_version=PROMPT_VERSION)
 
     def run(config: JudgeConfig, backend: Backend) -> list[Any]:
+        register_config(pg, config, RECIPE, FixedClock(datetime(2026, 11, 9, tzinfo=UTC)))
         return judge_many(
             pg,
             items,
@@ -380,5 +394,6 @@ def test_a_judge_v2_config_keeps_its_prompt_and_a_judge_v3_config_states_the_rul
     assert rows[0]["prompt_hash"] == V2_PROMPT_HASH != rows[1]["prompt_hash"]
     assert load_config(pg, CONFIG.id) == CONFIG
     assert config_prompt_version(pg, v3.id) == "judge.v3"
-    assert config_prompt_version(pg, "unregistered@judge.v2") == "judge.v2"
+    with pytest.raises(KeyError, match="not registered"):
+        config_prompt_version(pg, "unregistered@judge.v2")
     assert len(load_verdicts(pg, ids[0])) == 4

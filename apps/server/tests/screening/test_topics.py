@@ -22,6 +22,7 @@ from tests.screening.support import (
     central_import,
     protocol_source,
     recorded_backend,
+    register_judge,
     screening_records,
     seed_people,
 )
@@ -67,6 +68,7 @@ def test_topic_id_scopes_queue_and_progress(database: Database, tmp_path: Path) 
 
     with database.transaction() as tx:
         for topic, recs in split.items():
+            register_judge(tx)
             info = world.screening.open_stage(
                 tx,
                 command_id=new_id(),
