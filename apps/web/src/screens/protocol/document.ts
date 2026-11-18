@@ -199,6 +199,13 @@ export const comesAfter = (label: string, before: string) => {
   return false;
 };
 
+/** `doc` as the start of a new draft while version `inForce` is in force. A label that does not
+ * come after it becomes the next one, so a new draft never repeats the version in force. */
+export const startDraft = (doc: Doc, inForce: string | null): Doc =>
+  inForce !== null && !comesAfter(doc.version_label, inForce)
+    ? { ...doc, version_label: nextLabel(inForce) }
+    : doc;
+
 /** An ID not yet used in `taken`: `prefix` and the first free number. */
 export const freshId = (prefix: string, taken: ReadonlyArray<string>) => {
   for (let n = 1; ; n++) if (!taken.includes(`${prefix}${n}`)) return `${prefix}${n}`;
