@@ -397,3 +397,27 @@ def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path
     written = b"".join(p.read_bytes() for p in recorded)
     assert b"tool=kittum" in written
     assert password.encode() not in written and quote(password, safe="").encode() not in written
+
+
+def test_a_password_ordinary_text_holds_is_not_scrubbed_or_scanned_for(tmp_path: Path) -> None:
+    """The dev database password `kittum` is also the name on every report and PubMed's
+    `tool=kittum`. Scrubbing for it would rewrite what sources say, and sealing would refuse every
+    bundle. A long password is still scrubbed and scanned for."""
+    base = Settings(
+        database_url="postgresql://kittum:kittum@127.0.0.1:55432/kittum",
+        artifact_dir=tmp_path / "artifacts",
+        contact_email="librarian@example.org",
+    )
+    short = credentials(base)
+    assert short.private == ("librarian@example.org",)
+    assert not short.holds(b"<text>Kittum PRISMA 2020 flow</text>")
+    assert (
+        short.scrub_text("https://example.org/?tool=kittum") == "https://example.org/?tool=kittum"
+    )
+
+    password = "rec@rd-Only-7f3k"
+    long = credentials(
+        replace(base, database_url=f"postgresql://kittum:{quote(password, safe='')}@db/kittum")
+    )
+    assert password in long.private
+    assert long.holds(f"<text>{password}</text>".encode())

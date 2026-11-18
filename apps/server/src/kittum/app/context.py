@@ -175,6 +175,20 @@ def _named_secrets(settings: Settings) -> list[tuple[str, str]]:
     return [(name, value) for name, value in named if value]
 
 
+def _unclear(secret: str) -> str | None:
+    """What a key or password would need to be told from ordinary content, or None if it can."""
+    own = (
+        s.lower()
+        for s in ("kittum", user_agent(), CONTACT_PLACEHOLDER, "[redacted]", REPLAY_PREFIX)
+    )
+    folded = secret.lower()
+    if len(secret) < RECORDING_SECRET_LENGTH:
+        return f"of at least {RECORDING_SECRET_LENGTH} characters"
+    if folded in _COMMON_SECRETS or any(folded in v for v in own):
+        return "that is not a common word or part of what Kittum sends"
+    return None
+
+
 def recording_secrets(settings: Settings) -> tuple[str, ...]:
     """Every configured key and password. With the contact address, what no recording may hold."""
     return tuple(dict.fromkeys(value for _, value in _named_secrets(settings)))
@@ -182,9 +196,13 @@ def recording_secrets(settings: Settings) -> tuple[str, ...]:
 
 def credentials(settings: Settings) -> Credentials:
     """The deployment's private values: the settings the gateway places in requests, and every
-    other key and password, which nothing Kittum stores, caches, or seals may hold."""
+    other key and password, which nothing Kittum stores, caches, or seals may hold.
+
+    A key or password that ordinary content could hold is left out of what is scrubbed and
+    scanned: the dev database password `kittum` is also the name on every report. Recording
+    refuses such a secret outright (`check_recording_secrets`)."""
     return Credentials.of(
-        recording_secrets(settings),
+        tuple(s for s in recording_secrets(settings) if _unclear(s) is None),
         contact_email=settings.contact_email,
         ncbi_api_key=settings.ncbi_api_key,
         openalex_api_key=settings.openalex_api_key,
@@ -199,17 +217,9 @@ def check_recording_secrets(settings: Settings) -> None:
     Recording refuses a request and cleans a body that holds a secret. A short password, a common
     one, or one inside what Kittum itself sends (PubMed's `tool=kittum`, the User-Agent, the
     contact placeholder) would refuse or redact requests and bodies that hold no secret at all."""
-    own = [
-        s.lower()
-        for s in ("kittum", user_agent(), CONTACT_PLACEHOLDER, "[redacted]", REPLAY_PREFIX)
-    ]
     for name, value in _named_secrets(settings):
-        folded = value.lower()
-        if len(value) < RECORDING_SECRET_LENGTH:
-            problem = f"of at least {RECORDING_SECRET_LENGTH} characters"
-        elif folded in _COMMON_SECRETS or any(folded in v for v in own):
-            problem = "that is not a common word or part of what Kittum sends"
-        else:
+        problem = _unclear(value)
+        if problem is None:
             continue
         raise ConfigurationError(
             f"recording needs {name} to be a value {problem}, so that recording can tell it from"
