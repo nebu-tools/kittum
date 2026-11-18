@@ -43,7 +43,7 @@ def sealed(nrt: tuple[ReviewWorld, NrtSeqs], tmp_path_factory: pytest.TempPathFa
             actor_id=world.people.lead,
             cutoff_seq=seqs.full_text,
             rights=RightsProfile(
-                id="client-contract-7",
+                id="licence-terms-7",
                 withhold_sources={"embase": "Embase export licence: no redistribution"},
             ),
             ledger=world.ledger,
@@ -119,7 +119,7 @@ def test_the_bundle_verifies_offline_and_carries_every_report(
     ).fetchall()
     assert (row["included"], row["withheld_reason"]) == (
         0,
-        "client-contract-7: Embase export licence: no redistribution",
+        "licence-terms-7: Embase export licence: no redistribution",
     )
     assert not (sealed.path / "artifacts" / embase[0]).exists()
     outputs = [r[0] for r in db.execute("select raw_output_hash from verdict")]
