@@ -2325,9 +2325,6 @@
       "Comparator": {
         "additionalProperties": false,
         "properties": {
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
-          },
           "id": {
             "$ref": "#/components/schemas/Identifier"
           },
@@ -2789,9 +2786,6 @@
                 "type": "null"
               }
             ]
-          },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
           },
           "id": {
             "$ref": "#/components/schemas/Identifier"
@@ -3877,10 +3871,6 @@
         "title": "ExportView",
         "type": "object"
       },
-      "Extensions": {
-        "additionalProperties": true,
-        "type": "object"
-      },
       "ExtractionReview": {
         "additionalProperties": false,
         "properties": {
@@ -4910,7 +4900,7 @@
       },
       "JudgeInstructions": {
         "additionalProperties": false,
-        "description": "The editable parts of the AI judge's prompt for one search topic.\n\nThe strictness and the guidance fill the stage rule. A team may also replace the whole\nsystem message (`system_prompt`, where `{stage_rule}` marks where the stage rule and the\nguidance go) and the user message (`user_template`, which must keep `{criteria}` and\n`{text}`). The answer schema and Kittum's quote check stay: they are how Kittum reads and\nchecks an answer. The protocol's versions are the prompt's history; clearing a field goes back\nto Kittum's wording. A topic that sets nothing leaves the instructions out of the protocol,\nand unset fields stay out of it, so content hashes stay as they were before.",
+        "description": "The editable parts of the AI judge's prompt for one search topic.\n\nThe strictness and the guidance fill the stage rule. A team may also replace the whole\nsystem message (`system_prompt`, where `{stage_rule}` marks where the stage rule and the\nguidance go) and the user message (`user_template`, which must keep `{criteria}` and\n`{text}`). The answer schema and Kittum's quote check stay: they are how Kittum reads and\nchecks an answer. The protocol's versions are the prompt's history; clearing a field goes back\nto Kittum's wording.",
         "properties": {
           "guidance": {
             "anyOf": [
@@ -7172,17 +7162,6 @@
             "title": "Content Hash",
             "type": "string"
           },
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Profile"
-          },
           "version_id": {
             "$ref": "#/components/schemas/Id"
           },
@@ -7194,8 +7173,7 @@
         "required": [
           "version_id",
           "version_label",
-          "content_hash",
-          "profile"
+          "content_hash"
         ],
         "title": "ProtocolRef",
         "type": "object"
@@ -7441,7 +7419,7 @@
       },
       "PublishedProtocol": {
         "additionalProperties": false,
-        "description": "The version every decision reads now, with the words the review uses for core concepts:\nthe profile's labels where it has them, the core's otherwise.",
+        "description": "The version every decision reads now.",
         "properties": {
           "documentation": {
             "additionalProperties": {
@@ -7450,20 +7428,13 @@
             "title": "Documentation",
             "type": "object"
           },
-          "labels": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Labels",
-            "type": "object"
-          },
           "stored": {
             "$ref": "#/components/schemas/StoredProtocol"
           }
         },
         "required": [
           "stored",
-          "labels"
+          "documentation"
         ],
         "title": "PublishedProtocol",
         "type": "object"
@@ -9165,9 +9136,6 @@
             "title": "Effect Modifiers",
             "type": "array"
           },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
-          },
           "outcomes": {
             "items": {
               "$ref": "#/components/schemas/kittum__protocol__model__Outcome"
@@ -9175,16 +9143,6 @@
             "minItems": 1,
             "title": "Outcomes",
             "type": "array"
-          },
-          "profile": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Identifier"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "questions": {
             "items": {
@@ -9242,9 +9200,6 @@
             "default": false,
             "title": "Comparators Are Alternatives",
             "type": "boolean"
-          },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
           },
           "id": {
             "$ref": "#/components/schemas/Identifier"
@@ -9891,9 +9846,6 @@
             "title": "Criteria",
             "type": "array"
           },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
-          },
           "freshness": {
             "$ref": "#/components/schemas/FreshnessPolicy"
           },
@@ -9901,10 +9853,10 @@
             "$ref": "#/components/schemas/Identifier"
           },
           "judge": {
-            "$ref": "#/components/schemas/JudgeInstructions"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/Identifier"
+            "$ref": "#/components/schemas/JudgeInstructions",
+            "default": {
+              "strictness": "conservative"
+            }
           },
           "label": {
             "$ref": "#/components/schemas/LocalizedText"
@@ -9963,7 +9915,6 @@
         },
         "required": [
           "id",
-          "kind",
           "label",
           "mode",
           "scopes",
@@ -12450,7 +12401,12 @@
         "additionalProperties": false,
         "properties": {
           "category": {
-            "$ref": "#/components/schemas/Identifier"
+            "enum": [
+              "primary",
+              "secondary"
+            ],
+            "title": "Category",
+            "type": "string"
           },
           "definition": {
             "anyOf": [
@@ -12461,9 +12417,6 @@
                 "type": "null"
               }
             ]
-          },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
           },
           "id": {
             "$ref": "#/components/schemas/Identifier"

@@ -6,9 +6,6 @@ from typing import Any
 
 import yaml
 
-from kittum.core import Record
-from kittum.protocol import Profile, register_profile
-
 FIXTURES = Path(__file__).parent / "fixtures"
 COUNTS = FIXTURES / "counts"
 STACK = Path(__file__).parents[1] / "enrich" / "fixtures" / "stack"
@@ -25,7 +22,10 @@ DESCRIPTION = (
 )
 # The nicotine replacement example, whose PubMed strategy gets improved.
 EXAMPLE = Path(__file__).parents[4] / "examples" / "protocols" / "nicotine-replacement.yaml"
-# Where `KITTUM_ASSIST_BACKEND=demo` finds the recorded answers.
+# Where `KITTUM_ASSIST_BACKEND=demo` finds the recorded answers. The three draft answers were
+# edited by hand when the protocol schema changed: a top-level `null` field and the topic's `kind`
+# were dropped, and the outcome categories GLM named became `primary` and `secondary`. Every
+# answer was then re-keyed by replaying the recording run with those answers.
 ANSWERS = (
     Path(__file__).parents[2] / "src" / "kittum" / "app" / "demo_data" / "assist" / "answers.json"
 )
@@ -36,33 +36,11 @@ PUBMED = "search_topics[TRIALS].source_plan.sources[medline].strategy"
 # GLM gave for an earlier example when that example was removed, under the same model identity.
 TRANEXAMIC = EXAMPLE.with_name("tranexamic-acid.yaml")
 QUESTION = "questions[b1]"
-OFF_LABEL = {"uterotonic-combination"}
 
 
-class LicensedComparator(Record):
-    """A comparator extension: whether the comparator is used outside its licence."""
-
-    off_label: bool
-
-
-# A profile defined by the tests, since Kittum ships none: its comparators carry an extension
-# the model never sees, which the assistant must keep when it rewrites them.
-LICENSING = Profile(
-    id="licensing",
-    label={"en": "Licensing", "de": "Zulassung"},
-    extensions={"comparator": LicensedComparator},
-)
-
-
-def licensing_source() -> dict[str, Any]:
-    """The tranexamic acid example on the `licensing` profile, as JSON data."""
-    register_profile(LICENSING)
-    source = json.loads(json.dumps(yaml.safe_load(TRANEXAMIC.read_text()), default=str))
-    source["profile"] = LICENSING.id
-    for question in source["questions"]:
-        for comparator in question["comparators"]:
-            comparator["extensions"] = {"off_label": comparator["id"] in OFF_LABEL}
-    return source
+def tranexamic_source() -> dict[str, Any]:
+    """The tranexamic acid example as JSON data."""
+    return json.loads(json.dumps(yaml.safe_load(TRANEXAMIC.read_text()), default=str))
 
 
 def drafted_pubmed(document: dict) -> str:

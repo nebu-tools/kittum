@@ -60,11 +60,10 @@ from tests.assist.support import (
     DESCRIPTION,
     EXAMPLE,
     MISTYPED,
-    OFF_LABEL,
     PUBMED,
     QUESTION,
     accepted_subset,
-    licensing_source,
+    tranexamic_source,
 )
 from tests.documents.conftest import savepoint_db
 from tests.models.streaming import StreamingServer, chunks
@@ -320,13 +319,15 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     ctx.assistant = Assistant(recipe_id=recipe_id, backend=backend)
 
     # The lead brings in the example protocol as their own text. Only words the model wrote for
-    # that kind of field are the model's ("Serious adverse events" as an outcome's name); the
-    # example's choices and numbers are its own, though the draft chose the same elsewhere.
+    # that kind of field are the model's ("Serious adverse events" as an outcome's name), and the
+    # choices of an object that says what the model's said (that outcome is secondary, as in the
+    # draft); the example's other choices and numbers are its own, though the draft chose the
+    # same elsewhere.
     example = yaml.safe_load(EXAMPLE.read_text())
     mine = save(example)
     assert (mine["kind"], mine["parent_id"]) == ("edit", retopic["id"])
     shared = {m["path"] for m in mine["ai_parts"]}
-    assert shared == {"outcomes[sae].name.en"}
+    assert shared == {"outcomes[sae].name.en", "outcomes[sae].category"}
 
     def kind(path: str) -> str:
         return re.sub(r"\[[^\]]*\]", "[*]", path)
@@ -503,18 +504,11 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     plainly = publish_plainly(reverted["document"], "The drafted protocol")
     assert {p["path"] for p in plainly["ai_parts"]} == set(marks)
 
-    # A question improved in a profile's protocol: the model rewrites the comparators, and the
-    # profile's extensions on them (off-label use) survive, though the model never saw them.
-    on_profile = save(licensing_source())
-    off_label = {
-        c["id"]
-        for c in value_at(on_profile["document"], QUESTION)["comparators"]
-        if c["extensions"]["off_label"]
-    }
-    assert off_label == OFF_LABEL
+    # A question improved: the model rewrites the comparators, which were in German only.
+    tranexamic = save(tranexamic_source())
     question = ok(
         client.post(
-            f"{url}/revisions/{on_profile['id']}/improve", json={"part": QUESTION}, headers=lead
+            f"{url}/revisions/{tranexamic['id']}/improve", json={"part": QUESTION}, headers=lead
         )
     )["revision"]
     (rewritten,) = question["suggestion"]["changes"]
@@ -527,7 +521,6 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     )
     comparators = value_at(taken["document"], QUESTION)["comparators"]
     assert all(c["text"].get("en") for c in comparators)  # the model's change is in
-    assert {c["id"] for c in comparators if c["extensions"]["off_label"]} == off_label
 
     # The AI disclosure names the fields, the model, and every request with its attempts.
     with db.transaction() as tx:

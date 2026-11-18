@@ -1,19 +1,19 @@
 // The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
-// topic its screening mode, audit plan, sources, and criteria. Every heading uses the profile's
+// topic its screening mode, audit plan, sources, and criteria. Every heading uses the shared
 // words for core concepts. The methods lead writes versions in the form or as YAML, and publishes
 // them.
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { Criterion, ProfileLabels, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
+import type { Criterion, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
 import { formatDate } from "../../lib/format.ts";
-import { keyWords, modeLabel, revealLabel } from "../../lib/labels.ts";
+import { modeLabel, revealLabel } from "../../lib/labels.ts";
 import { Button } from "../../ui/Button.tsx";
 import { failure } from "../../ui/Form.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { plural, useProject } from "../project.tsx";
+import { plural, useProject, type Labels } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
 import type { FormState, Handover } from "./Assistant.tsx";
 import { forSaving, toDoc } from "./document.ts";
@@ -251,7 +251,7 @@ function Published({
 }) {
   const { protocol, labels } = useProject();
   if (!protocol) return null;
-  const { protocol: review, profile } = protocol;
+  const { protocol: review } = protocol;
   const criteria = review.topics.reduce((n, t) => n + t.criteria.length, 0);
   const questionName = new Map(
     review.questions.map((q, i) => [q.id, q.short_label || `${labels.scope} ${i + 1}`]),
@@ -407,13 +407,6 @@ function Published({
                 <dd>
                   {protocol.published_at ? formatDate(protocol.published_at) : "Not published"}
                 </dd>
-                <dt
-                  className="text-ink-2"
-                  title="A profile adds the rules and words of one agency or jurisdiction."
-                >
-                  Agency profile
-                </dt>
-                <dd>{profile.id ?? "none (Kittum’s own wording)"}</dd>
                 <dt className="text-ink-2">Content hash</dt>
                 <dd className="flex items-center gap-2">
                   <code className="font-mono text-xs" title={protocol.content_hash}>
@@ -482,16 +475,15 @@ function Jump({
   );
 }
 
-const OUTCOME_KINDS: Record<string, string> = { primary: "Primary", secondary: "Secondary" };
+const OUTCOME_KINDS = { primary: "Primary", secondary: "Secondary" } as const;
 
-/** Outcomes by name. Primary and secondary are said in words; any other category is a
- * vocabulary key, shown only on hover. */
+/** Outcomes by name, primary ones first. */
 function Outcomes({
   outcomes,
 }: {
   outcomes: ReadonlyArray<{
     readonly id: string;
-    readonly category: string;
+    readonly category: keyof typeof OUTCOME_KINDS;
     readonly name: string;
   }>;
 }) {
@@ -501,16 +493,10 @@ function Outcomes({
   return (
     <ul className="grid max-w-[80ch] gap-1.5 text-md">
       {ranked.map((o) => (
-        <li
-          key={o.id}
-          className="flex items-baseline gap-3"
-          title={`Category: ${keyWords(o.category)} (${o.category})`}
-        >
-          {OUTCOME_KINDS[o.category] ? (
-            <span className="w-[5.5rem] flex-none text-sm text-ink-2">
-              {OUTCOME_KINDS[o.category]}
-            </span>
-          ) : null}
+        <li key={o.id} className="flex items-baseline gap-3">
+          <span className="w-[5.5rem] flex-none text-sm text-ink-2">
+            {OUTCOME_KINDS[o.category]}
+          </span>
           <span>{o.name}</span>
         </li>
       ))}
@@ -525,7 +511,7 @@ function Topic({
   single,
 }: {
   topic: SearchTopic;
-  labels: ProfileLabels;
+  labels: Labels;
   questionName: ReadonlyMap<string, string>;
   /** The review's only search topic, covering every question. */
   single: boolean;
@@ -648,7 +634,7 @@ function Criteria({
 }: {
   id: string | undefined;
   topic: SearchTopic;
-  labels: ProfileLabels;
+  labels: Labels;
   title: string;
   count: number;
 }) {
@@ -712,7 +698,7 @@ function CriterionRow({
 }: {
   criterion: Criterion;
   index: number;
-  labels: ProfileLabels;
+  labels: Labels;
   original: boolean;
 }) {
   return (

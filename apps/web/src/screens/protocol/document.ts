@@ -1,6 +1,6 @@
 // The protocol as the server stores it (`ReviewProtocol` dumped to JSON), read and changed only as
-// far as the form shows it. Everything else in a document (outcome definitions, reference sets,
-// extensions) passes through the form untouched; the YAML view edits it.
+// far as the form shows it. Everything else in a document (outcome definitions, reference sets)
+// passes through the form untouched; the YAML view edits it.
 import type { AiMark, ProtocolRevision, ProtocolSource, QueryDialect } from "../../data/schema.ts";
 
 export type Localized = Readonly<Record<string, string>>;
@@ -97,7 +97,6 @@ export const blankDoc = (): Doc => ({
   search_topics: [
     {
       id: "studies",
-      kind: "studies",
       label: { en: "Studies" },
       mode: "M1",
       scopes: ["q1"],
@@ -359,7 +358,7 @@ export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly probl
     search_topics: list(source, "search_topics", "").map((t, i) => {
       const at = `search_topics[${i}]`;
       withId(t, at);
-      plain(t, ["kind", "mode"], `${at}.`);
+      plain(t, ["mode"], `${at}.`);
       const plan = t["source_plan"] ?? {};
       if (!isObject(plan)) problems.push(`${at}.source_plan must be a mapping of fields.`);
       const sourcePlan = isObject(plan) ? plan : {};

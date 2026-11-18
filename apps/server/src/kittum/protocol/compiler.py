@@ -9,7 +9,6 @@ Compilation runs in passes, and each reports every problem it finds, not just th
    rules, and the syntax of each source's search strategy as far as it can be checked without
    running it (balanced brackets and quotes). A PubMed field tag PubMed does not list is a
    warning (`protocol_warnings`), not a problem: PubMed searches it anyway.
-4. The profile, if the protocol names one: its extension schemas, its vocabularies, then its rules.
 
 Each problem carries the path into the source (`search_topics[1].criteria[0].applies_to[2]`), so an
 author can find it.
@@ -24,11 +23,10 @@ from typing import Any, Literal
 import yaml
 import yaml.constructor
 import yaml.resolver
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from kittum.core import KittumError, Record, Sha256, content_hash
 from kittum.protocol.model import ReviewProtocol, ScreeningMode, SearchTopic, Source
-from kittum.protocol.profile import ExtensionPoint, Profile, registered_profiles
 
 HASH_DOMAIN = "kittum.protocol.v1"
 
@@ -69,55 +67,22 @@ def protocol_hash(protocol: ReviewProtocol) -> str:
     return content_hash(protocol, domain=HASH_DOMAIN)
 
 
-def compile(
-    source: Mapping[str, Any] | str, *, profiles: Mapping[str, Profile] | None = None
-) -> ProtocolVersion:
+def compile(source: Mapping[str, Any] | str) -> ProtocolVersion:
     """Compile a mapping, or YAML or JSON text, into a `ProtocolVersion`.
 
-    `profiles` defaults to the registered profiles. Raises `ProtocolError` with every problem.
+    Raises `ProtocolError` with every problem.
     """
     if isinstance(source, str):
         source = _load(source)
     if not isinstance(source, Mapping):
         raise ProtocolError([ProtocolIssue(path="", message="a protocol must be a mapping")])
-    profiles = registered_profiles() if profiles is None else profiles
     raw = dict(source)
-    issues: list[ProtocolIssue] = []
-
-    profile: Profile | None = None
-    profile_id = raw.get("profile")
-    if isinstance(profile_id, str):
-        profile = profiles.get(profile_id)
-        if profile is None:
-            known = ", ".join(sorted(profiles)) or "none"
-            issues.append(
-                ProtocolIssue(
-                    path="profile",
-                    message=f"unknown profile {profile_id!r}; registered: {known}",
-                )
-            )
-        elif "effect_modifiers" not in raw and profile.default_effect_modifiers:
-            raw["effect_modifiers"] = [
-                m.model_dump(mode="json") for m in profile.default_effect_modifiers
-            ]
-
     _resolve_topic_scopes(raw)
     try:
         protocol = ReviewProtocol.model_validate(raw)
     except ValidationError as e:
-        issues += _issues_from_pydantic(e)
-        raise ProtocolError(issues) from None
-    issues += _cross_check(protocol)
-    if profile_id is not None and profile is None:
-        raise ProtocolError(issues)
-
-    protocol, extension_issues = _validate_extensions(protocol, profile)
-    issues += extension_issues
-    if profile is not None:
-        issues += _check_vocabularies(protocol, profile)
-        if not extension_issues:  # rules may rely on valid extensions, nothing else
-            for rule in profile.rules:
-                issues += rule(protocol)
+        raise ProtocolError(_issues_from_pydantic(e)) from None
+    issues = _cross_check(protocol)
     if issues:
         raise ProtocolError(issues)
     return ProtocolVersion(protocol=protocol, content_hash=protocol_hash(protocol))
@@ -174,9 +139,7 @@ def path_of(*parts: str | int) -> str:
     return out
 
 
-def _issues_from_pydantic(
-    error: ValidationError, prefix: tuple[str | int, ...] = ()
-) -> list[ProtocolIssue]:
+def _issues_from_pydantic(error: ValidationError) -> list[ProtocolIssue]:
     issues = []
     errors = error.errors()
     nested = [tuple(e["loc"]) for e in errors]
@@ -193,7 +156,7 @@ def _issues_from_pydantic(
             message += f", got {shown if len(shown) <= 60 else shown[:57] + '...'}"
         if err["type"] == "extra_forbidden":
             message = "unknown field"
-        issues.append(ProtocolIssue(path=path_of(*prefix, *loc), message=message))
+        issues.append(ProtocolIssue(path=path_of(*loc), message=message))
     return issues
 
 
@@ -258,11 +221,9 @@ def _duplicates(ids: list[tuple[str, str]], what: str) -> list[ProtocolIssue]:
 
 
 def _localized(node: Any, path: tuple[str | int, ...]) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Every localized text in a dumped protocol, outside extensions."""
+    """Every localized text in a dumped protocol."""
     if isinstance(node, dict):
         for key, value in node.items():
-            if key == "extensions":
-                continue
             if key in _LOCALIZED_KEYS and isinstance(value, dict):
                 yield path_of(*path, key), value
             else:
@@ -778,86 +739,4 @@ def _check_reference_set(topic: SearchTopic, here: tuple[str | int, ...]) -> lis
                 )
             else:
                 seen[key] = path
-    return issues
-
-
-# Profiles
-
-
-def _extension_points(
-    data: dict[str, Any],
-) -> Iterator[tuple[ExtensionPoint, tuple[str | int, ...], dict[str, Any]]]:
-    yield "protocol", (), data
-    for qi, question in enumerate(data["questions"]):
-        yield "question", ("questions", qi), question
-        for ci, comparator in enumerate(question["comparators"]):
-            yield "comparator", ("questions", qi, "comparators", ci), comparator
-    for oi, outcome in enumerate(data["outcomes"]):
-        yield "outcome", ("outcomes", oi), outcome
-    for ti, topic in enumerate(data["search_topics"]):
-        yield "search_topic", ("search_topics", ti), topic
-        for ci, criterion in enumerate(topic["criteria"]):
-            yield "criterion", ("search_topics", ti, "criteria", ci), criterion
-
-
-def _validate_extensions(
-    protocol: ReviewProtocol, profile: Profile | None
-) -> tuple[ReviewProtocol, list[ProtocolIssue]]:
-    """Validate every `extensions` mapping against the profile and store it normalized."""
-    data = protocol.model_dump(mode="json")
-    issues: list[ProtocolIssue] = []
-    for point, path, node in _extension_points(data):
-        extensions = node["extensions"]
-        schema: type[BaseModel] | None = profile.extensions.get(point) if profile else None
-        if schema is None:
-            if extensions:
-                issues.append(
-                    ProtocolIssue(
-                        path=path_of(*path, "extensions"),
-                        message="extensions need a profile that defines them"
-                        if profile is None
-                        else f"profile {profile.id!r} defines no {point} extensions",
-                    )
-                )
-            continue
-        try:
-            node["extensions"] = schema.model_validate(extensions).model_dump(mode="json")
-        except ValidationError as e:
-            issues += _issues_from_pydantic(e, (*path, "extensions"))
-    if issues:
-        return protocol, issues
-    return ReviewProtocol.model_validate(data), issues
-
-
-def _check_vocabularies(protocol: ReviewProtocol, profile: Profile) -> list[ProtocolIssue]:
-    issues: list[ProtocolIssue] = []
-    checks = [
-        (
-            "outcome_category",
-            [
-                (path_of("outcomes", i, "category"), o.category)
-                for i, o in enumerate(protocol.outcomes)
-            ],
-        ),
-        (
-            "topic_kind",
-            [
-                (path_of("search_topics", i, "kind"), t.kind)
-                for i, t in enumerate(protocol.search_topics)
-            ],
-        ),
-    ]
-    for vocabulary, values in checks:
-        terms = profile.vocabularies.get(vocabulary)
-        if terms is None:
-            continue
-        for path, value in values:
-            if value not in terms:
-                issues.append(
-                    ProtocolIssue(
-                        path=path,
-                        message=f"{value!r} is not a {vocabulary} of profile {profile.id!r} "
-                        f"({', '.join(terms)})",
-                    )
-                )
     return issues

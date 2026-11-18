@@ -188,7 +188,6 @@ const Scope = Schema.Struct({ id: Schema.String, label: Schema.String });
 const SearchTopic = Schema.Struct({
   id: Schema.String,
   label: Schema.String,
-  kind: Schema.String,
   mode: Schema.Literals(["M1", "M2", "M3", "S"]),
   /** `working` for mode S (a targeted search), `complete` otherwise. Only `working` allows the
    * AI's reading before the decision. */
@@ -220,38 +219,20 @@ const ReviewProtocol = Schema.Struct({
   version_label: Schema.String,
   questions: Schema.Array(Question),
   outcomes: Schema.Array(
-    Schema.Struct({ id: Schema.String, category: Schema.String, name: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      category: Schema.Literals(["primary", "secondary"]),
+      name: Schema.String,
+    }),
   ),
   topics: Schema.Array(SearchTopic),
 });
-
-/**
- * Words a review profile uses for core concepts. The core is domain-neutral; a profile may rename
- * "question" (a subpopulation), "outcome" (an endpoint), and so on. The screens read every such
- * label from here and never hard-code one.
- */
-export const ProfileLabels = Schema.Struct({
-  scope: Schema.String,
-  population: Schema.String,
-  intervention: Schema.String,
-  comparator: Schema.String,
-  outcome: Schema.String,
-  study_type: Schema.String,
-  other: Schema.String,
-  report: Schema.String,
-  study: Schema.String,
-  search_topic: Schema.String,
-});
-export type ProfileLabels = typeof ProfileLabels.Type;
-
-const ProtocolProfile = Schema.Struct({ id: Schema.NullOr(Schema.String), labels: ProfileLabels });
 
 export const ProtocolVersion = Schema.Struct({
   version_id: Id,
   protocol: ReviewProtocol,
   content_hash: Sha256,
   published_at: Schema.NullOr(Schema.String),
-  profile: ProtocolProfile,
 });
 export type ProtocolVersion = typeof ProtocolVersion.Type;
 

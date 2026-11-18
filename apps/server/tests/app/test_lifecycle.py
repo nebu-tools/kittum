@@ -100,7 +100,7 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
         )
     )
     published = ok(client.get(f"/api/projects/{pid}/protocol"))
-    assert published["labels"]["slot.population"] == "Population"  # no profile: the core's words
+    assert published["documentation"] == {"TRIALS": "complete"}
 
     for source, platform, file in (
         ("central", "Cochrane Library (Wiley)", "central_export.ris"),

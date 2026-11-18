@@ -7,8 +7,7 @@ for the judge, and the exclusion reason is the criterion ID.
 
 A reviewer's rendering takes its interface strings from `_UI`, one entry per language (English
 and German today); a language without an entry falls back to English around the criterion's own
-text, so adding a language is one entry. The judge's renderings are always English. A profile may
-rename the PICO slots in headings ("slot.<slot>" labels).
+text, so adding a language is one entry. The judge's renderings are always English.
 
 The judge's renderings are versioned with the judge prompt (`kittum.judge.PROMPT_VERSION`), because
 a recorded request must render again byte for byte. `render_prompt` is the `judge.v2` fragment: the
@@ -26,7 +25,6 @@ from kittum.core import Record
 
 if TYPE_CHECKING:
     from kittum.protocol.model import Criterion, Stage
-    from kittum.protocol.profile import Profile
 
 type Answer = Literal["met", "not_met", "unclear"]
 
@@ -113,17 +111,13 @@ class CriterionQuestion(Record):
     keys: tuple[AnswerKey, ...]
 
 
-def render_question(
-    criterion: Criterion, language: str, stage: Stage, *, profile: Profile | None = None
-) -> CriterionQuestion:
+def render_question(criterion: Criterion, language: str, stage: Stage) -> CriterionQuestion:
     """The question a reviewer answers with one key, in one of the criterion's languages."""
     _check_stage(criterion, stage)
     if language not in criterion.text:
         raise ValueError(f"criterion {criterion.id} has no text in {language!r}")
     ui = _UI.get(language, _UI["en"])
     slot = ui.slot[criterion.slot]
-    if profile is not None:
-        slot = profile.label_for(f"slot.{criterion.slot}", language) or slot
     yes_key, yes, no = ui.keys[criterion.polarity]
     return CriterionQuestion(
         criterion_id=criterion.id,

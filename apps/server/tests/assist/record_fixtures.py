@@ -8,7 +8,7 @@ Run once, by hand, with a hosted or local model configured as a deployment confi
 It answers from the recordings where it has one and asks the model only for new requests; with
 `--replay` it asks no model and records only the counts; `--no-counts` skips the counts.
 It drafts the protocol from `DESCRIPTION`, improves the example's PubMed strategy and the draft's,
-improves question b1 of the tranexamic acid example on a test profile,
+improves question b1 of the tranexamic acid example,
 and counts every strategy the tests count on PubMed and ClinicalTrials.gov. The answers go to
 `kittum/app/demo_data/assist/answers.json`, keyed by request (no key, no address); the counts to
 `fixtures/counts`, which the e2e stack's recordings point at. This is not a test.
@@ -49,7 +49,7 @@ from tests.assist.support import (
     STACK,
     accepted_subset,
     drafted_pubmed,
-    licensing_source,
+    tranexamic_source,
 )
 from tests.enrich.record_fixtures import RecordingTransport
 
@@ -114,8 +114,8 @@ def main(recipe_id: str, *, replay: bool = False, counts: bool = True) -> None:
             )
         print(f"{part}: {[c.rationale for c in changes]}")
 
-    on_profile = compile(licensing_source()).protocol.model_dump(mode="json")
-    question = assist.improve(backend, recipe_id, new_id(), on_profile, QUESTION)
+    tranexamic = compile(tranexamic_source()).protocol.model_dump(mode="json")
+    question = assist.improve(backend, recipe_id, new_id(), tranexamic, QUESTION)
     assert question.suggestion, question.issues
     print(f"{QUESTION}: {[(c.field, c.rationale) for c in question.suggestion.changes]}")
     print(f"draft: {len(drafted.model.attempts)} attempts")

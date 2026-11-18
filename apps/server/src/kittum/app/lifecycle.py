@@ -93,7 +93,6 @@ class ProtocolRef(Record):
     version_id: Id
     version_label: str
     content_hash: str
-    profile: str | None
 
 
 class ProjectSummary(Record):
@@ -270,7 +269,6 @@ def project_summary(tx: Tx, project_id: Id, screening: Screening) -> ProjectSumm
             version_id=stored.id,
             version_label=protocol.version_label,
             content_hash=stored.version.content_hash,
-            profile=protocol.profile,
         )
         if stored and protocol
         else None,

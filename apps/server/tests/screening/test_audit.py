@@ -82,7 +82,7 @@ def test_sentinels_and_audits_are_invisible_but_count_in_the_gauge(
         (opened,) = [e for e in world.ledger.events(tx, world.project_id) if e.type == STAGE_OPENED]
     audited = set(opened.payload["audit_refs"])
     assert len(audited) == 4  # 10% of 40
-    assert opened.payload["sentinel_refs"] == ["sentinel:nrt-lozenge"]  # 1% of 40, rounded up
+    assert opened.payload["sentinel_refs"] == ["sentinel:nrt-spray"]  # 1% of 40, rounded up
 
     settings = Settings(database_url="postgresql://unused", artifact_dir=tmp_path)
     context = AppContext(

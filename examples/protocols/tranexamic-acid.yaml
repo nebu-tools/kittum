@@ -149,7 +149,6 @@ effect_modifiers:
       - hoch
 search_topics:
   - id: RCT
-    kind: rct_drug
     label:
       de: RCTs zu Tranexamsäure gegen Placebo oder Standardbehandlung
       en: RCTs of tranexamic acid against placebo or usual care
@@ -416,7 +415,6 @@ search_topics:
           - review
           - Kongress
   - id: IC
-    kind: rct_indirect
     label:
       de: RCTs für einen indirekten Vergleich über Placebo (illustrativ)
       en: RCTs for an indirect comparison via placebo (illustrative)

@@ -15,8 +15,8 @@ How Kittum reads the answer:
 - IDs start with a letter and use letters, digits, `_`, `.` and `-` (at most 64 characters).
 - Texts in several languages are lists of {"key": language code, "value": text}, and every one of
   them includes the protocol's default language.
-- Write null for an optional field you leave out. Leave `profile` null and `reference_set` with
-  empty lists: do not invent known studies.
+- Write null for an optional field you leave out. Leave `reference_set` with empty lists: do not
+  invent known studies.
 - A question names its outcomes by ID from `outcomes` (an empty list means every outcome).
 - A search topic lists one scope per question it covers: {"id": the question's ID, "label": that
   question's label in the default language, word for word, "kind": "question"}.

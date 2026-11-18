@@ -5,7 +5,7 @@ CRITERIA = "search_topics[TRIALS].criteria"
 
 
 def test_diff_reports_a_changed_criterion_and_a_mode_change() -> None:
-    before = compile(example_source(), profiles={})
+    before = compile(example_source())
     source = example_source()
     topic = source["search_topics"][0]
     topic["mode"] = "M2"
@@ -24,7 +24,7 @@ def test_diff_reports_a_changed_criterion_and_a_mode_change() -> None:
             "applies_to": ["TRIALS"],
         }
     )
-    after = compile(source, profiles={})
+    after = compile(source)
 
     d = diff(before, after)
     assert d.mode_changes == (
@@ -53,7 +53,7 @@ def test_diff_reports_a_changed_criterion_and_a_mode_change() -> None:
 
 
 def test_a_new_question_shows_as_an_added_scope() -> None:
-    before = compile(example_source(), profiles={})
+    before = compile(example_source())
     source = example_source()
     source["questions"].append(
         {
@@ -75,7 +75,7 @@ def test_a_new_question_shows_as_an_added_scope() -> None:
             "applies_to": ["preloading"],
         }
     )
-    after = compile(source, profiles={})
+    after = compile(source)
 
     d = diff(before, after)
     assert d.added_scopes == ("preloading",)
@@ -84,11 +84,11 @@ def test_a_new_question_shows_as_an_added_scope() -> None:
 
 
 def test_reordering_criteria_is_one_order_change() -> None:
-    before = compile(example_source(), profiles={})
+    before = compile(example_source())
     source = example_source()
     criteria = source["search_topics"][0]["criteria"]
     criteria[0], criteria[1] = criteria[1], criteria[0]
-    d = diff(before, compile(source, profiles={}))
+    d = diff(before, compile(source))
     assert [c.path for c in d.changes] == [f"{CRITERIA}.order"]
     assert d.changed_criteria == ()
     assert diff(before, before).is_empty

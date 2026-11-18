@@ -203,7 +203,7 @@ def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, An
     fetched = client.get(f"{base}/{draft['id']}").json()
     assert fetched == body
     protocol = fetched["version"]["protocol"]
-    assert (protocol["default_language"], protocol["profile"]) == ("de", None)
+    assert protocol["default_language"] == "de"
     assert [q["id"] for q in protocol["questions"]] == ["a1", "a2", "b1", "b2"]
     assert [t["mode"] for t in protocol["search_topics"]] == ["M1", "M2"]
     assert client.get(f"{base}/{new_id()}").status_code == 404

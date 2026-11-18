@@ -1,7 +1,6 @@
 import pytest
 
 from kittum.protocol import (
-    Profile,
     compile,
     render_prompt,
     render_prompt_criterion,
@@ -10,7 +9,7 @@ from kittum.protocol import (
 )
 from tests.protocol.support import example_text
 
-PROTOCOL = compile(example_text(), profiles={}).protocol
+PROTOCOL = compile(example_text()).protocol
 BY_ID = {c.id: c for c in PROTOCOL.criteria}
 
 
@@ -41,10 +40,9 @@ def test_reviewer_question_in_each_language_the_criterion_has() -> None:
         render_question(BY_ID["DESIGN"], "de", "title_abstract")
 
 
-def test_a_profile_renames_slots_in_headings() -> None:
-    profile = Profile(id="p", label={"en": "P"}, labels={"slot.comparator": {"en": "Control"}})
-    q = render_question(BY_ID["COMP-CONTROL"], "en", "full_text", profile=profile)
-    assert q.heading == "COMP-CONTROL · Control · inclusion · full text"
+def test_a_full_text_question_names_its_slot_and_stage() -> None:
+    q = render_question(BY_ID["COMP-CONTROL"], "en", "full_text")
+    assert q.heading == "COMP-CONTROL · Comparator · inclusion · full text"
     assert q.hint == "To exclude, mark the passage that shows it."
 
 

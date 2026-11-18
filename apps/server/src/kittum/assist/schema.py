@@ -8,10 +8,9 @@ protocol it must compile to.
 - Every object has `additionalProperties: false`; no `default`, `title`, or sibling of `$ref`.
 - A mapping (`LocalizedText`, `{en: ..., de: ...}`) has no fixed keys, which strict decoding
   cannot express, so it becomes a list of `{key, value}` pairs.
-- `extensions` are left out: a profile's typed fields are the lead's to write. So is a
-  criterion's `short_label`, a display aid for the screening strip, its `exclusion_reason` for
-  the flow diagram, and a topic's `judge`
-  instructions, which the lead tunes on the test bench (and recorded drafts replay).
+- Some fields are the lead's to write and are left out: a criterion's `short_label`, a display
+  aid for the screening strip, its `exclusion_reason` for the flow diagram, and a topic's `judge`
+  instructions, which the lead tunes on the test bench.
 
 `from_strict` turns an answer back into the protocol's own shape: pairs into mappings, and a null
 for a property the model may leave out into no property, so its default applies. A key given twice
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 _DROP = frozenset({"default", "title"})
-OMITTED = frozenset({"extensions", "short_label", "exclusion_reason", "judge"})
+OMITTED = frozenset({"short_label", "exclusion_reason", "judge"})
 
 
 def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
@@ -35,8 +34,7 @@ def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
     root = _strict(raw)
     strict_defs = {name: _strict(d) for name, d in defs.items()}
     # A definition only an omitted property uses (a topic's `judge`) is left out with it.
-    # `Extensions` stays, unused as it is: the recorded drafts were keyed with it.
-    used = _referenced(root, strict_defs) | ({"Extensions"} & set(strict_defs))
+    used = _referenced(root, strict_defs)
     if used:
         root["$defs"] = {name: d for name, d in strict_defs.items() if name in used}
     return root
