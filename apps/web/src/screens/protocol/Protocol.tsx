@@ -690,7 +690,13 @@ function Criteria({
         </thead>
         <tbody>
           {topic.criteria.map((c, index) => (
-            <CriterionRow key={c.id} criterion={c} index={index} labels={labels} original={original} />
+            <CriterionRow
+              key={c.id}
+              criterion={c}
+              index={index}
+              labels={labels}
+              original={original}
+            />
           ))}
         </tbody>
       </table>
