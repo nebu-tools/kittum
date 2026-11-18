@@ -200,7 +200,7 @@ def check_recording_secrets(settings: Settings) -> None:
             continue
         raise ConfigurationError(
             f"recording needs {name} to be a value {problem}, so that recording can tell it from"
-            ' ordinary content; record with a longer one (README, "Record a live run, replay it")'
+            " ordinary content; record with a longer one (docs/models-and-recordings.md)"
         )
 
 

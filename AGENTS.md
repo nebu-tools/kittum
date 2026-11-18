@@ -2,7 +2,7 @@
 
 Kittum runs auditable, AI-assisted systematic literature reviews, from the protocol to the final
 reports, with every decision in a hash-chained ledger. Read [DESIGN.md](DESIGN.md) before changing
-behaviour. Pick work from [docs/work-packages.md](docs/work-packages.md).
+behaviour.
 
 ## Layout
 
@@ -11,13 +11,12 @@ kittum/
 ├── apps/
 │   ├── server/                 # Python 3.14, uv: every module below, the API, and the CLI
 │   │   ├── src/kittum/<module>/   # one package per module from DESIGN.md
-│   │   ├── src/kittum/profiles/   # optional agency or jurisdiction profiles
 │   │   ├── tests/<module>/        # that module's tests
 │   │   └── db/migrations/         # dbmate SQL migrations
 │   └── web/                    # the reviewer workbench (React 19, TanStack Router, Vite+)
 ├── packages/contracts/         # TypeScript client generated from the server's OpenAPI
 ├── infra/compose.yaml          # Postgres 18, dbmate, GROBID
-└── docs/                       # design reference and work packages
+└── docs/                       # design reference
 ```
 
 ## Setup and checks
@@ -45,29 +44,6 @@ pnpm --dir apps/web e2e                # the whole review on the real stack (KIT
 CI runs all of this, including Postgres 18 and a check that the generated contracts match the
 server.
 
-## Working in parallel
-
-Several agents work at once, one work package each. The rules keep them out of each other's way.
-
-- **One work package per branch**, named `kittum/wp-NN-short-name`. Commit to it; the
-  integrator merges branches. Do not push or open pull requests unless your task says so.
-- **Stay inside your module.** Change `src/kittum/<module>/`, `tests/<module>/`, your own
-  migrations, and your module's section in `docs/work-packages.md`. Nothing else.
-- **Import other modules only through their package**: `from kittum.judge import Verdict`, never
-  `from kittum.judge.prompts import ...`. `tests/test_architecture.py` enforces this and the
-  allowed dependencies. Tests may also import `kittum.<module>.testing` fakes.
-- **Treat other modules' public types as fixed.** If you need a change to another module's
-  interface, or to `core`, `ledger/chain.py`, the `ALLOWED` table, or the foundation migration,
-  open a small pull request for only that change first, and say why.
-- **Build against fakes.** Every module with a seam ships a fake in `<module>/testing.py`
-  (`InMemoryLedger`, `RecordedBackend`, `FakeTransport` exist already). If your module has a seam,
-  ship its fake with your first pull request so others can use it.
-- **HTTP routes** for your module go in `src/kittum/api/routes/<module>.py` as a `router`,
-  registered with one line in `api/routes/__init__.py`. Routes take `Context` and stay thin. If you
-  need a new field on `AppContext`, add it in the same change and say so.
-- **Migrations** are new files named `<UTC timestamp>_<module>_<what>.sql` with `migrate:up` and
-  `migrate:down`. Create only your module's tables; never alter another module's.
-
 ## Conventions
 
 - **Transactions:** a function that changes state takes `tx: kittum.db.Tx` from its caller and
@@ -75,7 +51,16 @@ Several agents work at once, one work package each. The rules keep them out of e
   do (`with ctx.db.transaction() as tx:`). Rows come back as dicts.
 - **Artifacts** (PDFs, raw responses, model outputs, reports) go to `kittum.storage.ArtifactStore`
   by SHA-256 before any row references them.
-
+- **Import other modules only through their package**: `from kittum.judge import Verdict`, never
+  `from kittum.judge.prompts import ...`. `tests/test_architecture.py` enforces this and the
+  allowed dependencies. Tests may also import `kittum.<module>.testing` fakes.
+- **Build against fakes.** Every module with a seam ships a fake in `<module>/testing.py`
+  (`InMemoryLedger`, `RecordedBackend`, `FakeTransport`). A new seam ships its fake in the same
+  change.
+- **HTTP routes** for a module go in `src/kittum/api/routes/<module>.py` as a `router`, registered
+  with one line in `api/routes/__init__.py`. Routes take `Context` and stay thin.
+- **Migrations** are new files named `<UTC timestamp>_<module>_<what>.sql` with `migrate:up` and
+  `migrate:down`. A module creates only its own tables and never alters another module's.
 - Values that cross modules are `kittum.core.Record`s: frozen, unknown fields rejected.
 - IDs come from `kittum.core.new_id()` (UUIDv7). Time comes from a `Clock`, never `datetime.now()`.
 - Decimals stay exact strings with explicit units. Empty is not zero.
@@ -91,12 +76,7 @@ Several agents work at once, one work package each. The rules keep them out of e
   constructor, a getter, or that a function exists. Every test should be able to catch a bug a
   user would notice.
 - Tests never touch the network. Use the fakes, recorded responses, or fixtures in the repo.
-- Unimplemented interface functions raise `NotImplementedError("WP-NN")`. Replace, don't wrap.
-- **The core is domain-neutral.** Core modules and their docs name no jurisdiction, agency, or
-  agency template. Jurisdiction- or agency-specific terms, rules, vocabularies, report targets, and
-  appraisal instruments belong in `kittum.profiles.<id>` and `docs/profiles/`. Core modules
-  never import a profile; profiles register at the entry points. See
-  [DESIGN.md, "Profiles"](DESIGN.md#profiles).
+- **The core is domain-neutral.** Code and docs name no jurisdiction, agency, or agency template.
 - Python and TypeScript match the surrounding code: comment density, naming, idiom.
 
 ## Dependencies and licences
@@ -110,7 +90,6 @@ with its licence and the reason, in the same pull request.
 
 ## Done means
 
-- The module's interface functions work for the cases in its work package, with tests.
+- The change works for the cases it is for, with tests.
 - Ruff, ty, pytest, and (if touched) `pnpm check` pass.
-- The module's fake still matches its interface.
-- `docs/work-packages.md` says what is done and what is left.
+- Every fake still matches its interface.

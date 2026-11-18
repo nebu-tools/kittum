@@ -1,259 +1,183 @@
 # Kittum
 
-Kittum is a workbench for auditable, AI-assisted systematic literature reviews. It runs the review
-from the protocol to the final reports. AI screens and extracts beside two human reviewers, and
-every decision lands in a hash-chained ledger. The deliverable is the review output plus one
-database file that holds the whole audit trail.
+<img align="right" src="assets/branding/kittum-logo.webp" alt="Kittum logo: a hen with spectacles sifting sheets of paper through a kitchen sieve" width="160" height="160">
 
-The core does not depend on any jurisdiction. The rules of a particular agency or jurisdiction come
-from an optional [profile](DESIGN.md#profiles).
+Kittum is a workbench for systematic reviews that someone else must be able to audit. The AI
+screens each record as a blinded third reader beside two human reviewers. Every decision goes into
+a signed, hash-chained ledger, and anyone can verify that ledger offline.
 
-Status: a working review from the protocol to full-text screening, with the workbench on the
-real API; extraction, appraisal, and reports are being built. The work is split into
-[work packages](docs/work-packages.md). [AGENTS.md](AGENTS.md) explains how to build, test, and
-work on it in parallel.
+<br clear="right">
 
-## Run Kittum
+## Status
 
-You need Docker, [uv](https://docs.astral.sh/uv/), Node 26 with pnpm, and, for live AI screening,
-[Ollama](https://ollama.com) with `ollama pull qwen3.5:4b`. From `kittum/`:
+Kittum runs a review from the protocol to the reports. Some stages are complete. Others work for
+the common case only.
+
+| Stage | What works | What is missing |
+| --- | --- | --- |
+| Protocol | PICO per scope, criteria, search plans, and screening modes, in a form or as YAML. Every save is a revision. A model can draft the protocol and suggest changes, and the methods lead accepts each one. Publishing freezes and signs a version. | |
+| Search | PubMed and ClinicalTrials.gov run live. Imports of RIS, PubMed XML and MEDLINE, Scopus CSV, Web of Science, registry CSV, and your own CSV or XLSX list. A known pool shows which known papers a search misses. | Commercial databases have no live adapter; import their exports. |
+| Enrichment | OpenAlex, Crossref, Europe PMC, Unpaywall, and PubTator fill identifiers and abstracts, list open-access copies, and flag retractions. | Local entity tagging. |
+| Corpus | Deduplication, record-to-study links that a human confirms, and frozen identity revisions for the PRISMA counts. | Update searches: Kittum refuses a second corpus ingest. |
+| Screening | Modes M1, M2, M3, and S at title and abstract and at full text. The server enforces blinding. The AI's reading appears after the human decides. Sentinels, audit samples, adjudication, and second opinions. | One AI judge per stage. M3 reports its stop test but does not stop the queues. |
+| Full text | The open-access waterfall, uploads, PDF parsing, and quote anchors on the parsed text. | OCR adapters. |
+| Extraction | A deterministic path (Janus) and an LLM path, validators, and reconciliation. Every accepted value is grounded in a quote on the PDF. | No second independent extraction when the paths disagree on a critical field. No grounding exceptions, such as a value read from a figure. |
+| Appraisal | RoB 2 for individually randomised trials, with the published algorithms and quotes checked against the PDF. | All other instruments, including the RoB 2 variants for cluster and crossover trials, and ROBINS-I. |
+| Reports | The PRISMA 2020 flow, RIS files, the AI-use disclosure, extraction values, the risk-of-bias table, and the sealed handover bundle with its offline check. | |
+
+There is no sign-in yet. The workbench asks who you are, and the server accepts the answer. Anyone
+who can reach the server can act as any reviewer, the methods lead included. Run Kittum only on a
+machine or network where you trust every user.
+
+## Try the demo
+
+The demo is a seeded review: the nicotine replacement example protocol, a recorded PubMed search,
+a CENTRAL export, two open-access trial PDFs, and the AI judge's recorded readings. It needs no
+network and no model server. You need Docker, [uv](https://docs.astral.sh/uv/), and Node 26 with
+pnpm. Run these commands from the repository root:
 
 ```sh
-# 1. Postgres 18, migrated
+# Postgres 18, migrated
 docker compose -f infra/compose.yaml up -d --wait postgres
 docker compose -f infra/compose.yaml run --rm migrate
 
-# 2. Install, and build the workbench
+# Install, and build the workbench into apps/web/dist
 (cd apps/server && uv sync)
 pnpm install && pnpm build
 
-# 3. Settings: copy and adjust, then load them in each shell below
+# Settings. .env.example sets KITTUM_WEB_DIST=../web/dist, so `kittum serve` serves the
+# workbench too. Load the settings in every shell you use below.
 cp .env.example .env
-cd apps/server && set -a && . ../../.env && set +a
+cd apps/server
+set -a && . ../../.env && set +a
 
-# 4. A complete demo review: the nicotine replacement example protocol, a recorded PubMed search,
-#    a CENTRAL export, a citation search, two CC BY trial PDFs, and title and abstract screening
-#    with the AI judge's readings. Without a model server, replay the recorded answers:
+# Seed the demo review with the recorded answers
 uv run kittum demo seed
-#    or judge live with the local model in KITTUM_LLM_ENDPOINTS (a few seconds per record on a
-#    GPU, much longer on a CPU):
-uv run kittum demo seed --live
 
-# 5. The API and the workbench from one process, and a worker for the AI judge's jobs. Both use
-#    the judge the demo was seeded with: add KITTUM_JUDGE_BACKEND=demo for a replayed demo.
-uv run kittum serve            # http://127.0.0.1:8100
-uv run kittum worker           # in a second shell
+# The API and the workbench on http://127.0.0.1:8100, and a worker in a second shell
+KITTUM_JUDGE_BACKEND=demo uv run kittum serve
+KITTUM_JUDGE_BACKEND=demo uv run kittum worker
 ```
 
-Open <http://127.0.0.1:8100>, choose the review, and choose who you are. There is no sign-in yet:
-anyone who can reach the server can act as anyone, so run it only where every user is trusted.
-Two reviewers can screen side by side in two browser tabs; each tab remembers its own person.
-`?as=<actor ID>` on any workbench URL picks the person too, and `kittum demo seed` prints the IDs.
+Open <http://127.0.0.1:8100>, choose the review, and choose who you are. To screen as two reviewers
+side by side, use two browser tabs. Each tab remembers its own person.
 
-A walk through the demo:
+1. Sam Okafor and Jun Park screen titles and abstracts. Press `i` to include, `e` and a number to
+   exclude on a criterion, `u` for unclear, `Backspace` to undo, and `Space` for the next record.
+   The AI shows its reading only after the reviewer decides, and only when it disagrees.
+2. Rita Nunes, the auditor, screens the audit sample.
+3. Elena Weiss adjudicates the conflicts between the two reviewers.
+4. Morgan Lee, the methods lead, follows **Progress**, confirms study links on **Studies**, and
+   renders the PRISMA flow on **Reports**. Sealing the bundle needs a checkpoint key in
+   `KITTUM_CHECKPOINT_KEY`. `.env.example` shows how to make one.
 
-1. **Sam Okafor** and **Jun Park** screen title and abstract (`i` include, `e` then `1` to `3`
-   exclude on a criterion, `u` unclear, `Backspace` undo, `Space` next). The AI judge shows its
-   reading only after a reviewer's own decision, and only when it disagrees.
-2. **Rita Nunes**, the auditor, screens the random audit sample and, among it, the records both
-   reviewers excluded while the model saw no failing criterion.
-3. **Elena Weiss** adjudicates the human conflicts (`1`, `2` adopt a reviewer's decision); the AI's
-   reading opens after she decides.
-4. **Morgan Lee**, the methods lead, watches **Progress** (the PRISMA flow, kappa, the extra
-   screens, the audit gauge, the ledger check), opens full-text screening there with `n`,
-   confirms study links on **Studies** (`Enter`), and on **Reports** renders the PRISMA flow (`p`)
-   and seals the handover bundle (`s`; needs `KITTUM_CHECKPOINT_KEY`), which `uv run kittum verify
-   <path>` checks offline.
-5. The reviewers screen the full texts: `]` jumps to a protocol term on the page, `Enter` adopts
-   it as evidence, `y` `n` `?` give each criterion a verdict, `i` `e` `x` decide.
+`uv run kittum verify <bundle>` checks a sealed bundle offline, and
+`uv run kittum ledger verify <project ID>` checks a project's chain in the database.
 
-`uv run kittum ledger verify <project ID>` checks the project's hash chain.
+To judge live with a local model, install [Ollama](https://ollama.com), run
+`ollama pull qwen3.5:4b`, and seed with `uv run kittum demo seed --live`. Then start `serve` and
+`worker` without `KITTUM_JUDGE_BACKEND=demo`.
 
-For a review of your own, press `c` on the start page and set it up in the browser as its methods
-lead: Setup walks through the steps in order. Add the people with their roles, write the protocol
-from an example in `examples/protocols/` or your own file and publish it, import each database's
-export (RIS, CENTRAL, Embase, PubMed XML, registry CSV) or run PubMed and ClinicalTrials.gov live,
-build the corpus, open title and abstract screening with its sentinels
-(`examples/sentinels/nicotine-replacement.yaml` for the example protocol), and fetch or upload the
-full texts on Retrieval. `uv run kittum project --help` lists the same steps for the command line.
+To start a review of your own, press `c` on the start page. **Setup** takes the methods lead through
+the steps in order. `uv run kittum project --help` lists the same steps for the command line.
 
-Building the corpus queues its enrichment, which `kittum worker` runs through the source gateway:
-OpenAlex, Europe PMC, Crossref, Unpaywall, and PubTator 3 fill missing identifiers and abstracts,
-list open-access locations, flag retractions and corrections, and tag drugs and diseases. A source
-that fails is recorded and the others still answer. **Studies** shows the run per source and, with
-`o` on a record, where each of its fields came from; `r` enriches again. Once records are included
-at title and abstract, `o` on **Retrieval** has the worker walk the open-access waterfall for each
-report without a full text (Europe PMC, Unpaywall, OpenAlex, then the publisher's openly licensed
-PDF listed in Crossref), lists every attempt under its report, and stores each PDF it gets with its
-licence; upload the rest by hand with `u`. Set `KITTUM_CONTACT_EMAIL` first: Crossref's polite
-pool and Unpaywall need it, and without it enrichment skips Unpaywall. `KITTUM_OPENALEX_API_KEY`
-and `KITTUM_NCBI_API_KEY` are optional and raise those sources' limits (see `.env.example`).
+## Concepts
 
-To judge with a hosted OpenAI-compatible API instead, add it as a recipe of your own in a file
-under `.kittum/` (git ignores it), point `KITTUM_RECIPES_FILE` at it, and name the environment
-variable that holds the key in `KITTUM_LLM_API_KEYS`. Kittum sends the key as a bearer token and
-never stores it; the AI disclosure records the recipe, `serving: hosted`, and the endpoint. Which
-records may go to a hosted model is your decision. For example, in
-`apps/server/.kittum/recipes.yaml`:
+### Ledger
 
-```yaml
-recipes:
-  - id: example-provider-model
-    family: example
-    repository: example-org/example-model # where the weights and their licence come from
-    served_name: example-model # the model name the API expects
-    revision: "2026-10"
-    weights_licence: apache-2.0 # must be on ALLOWED_WEIGHTS_LICENCES
-    licence_url: https://example.org/example-model/LICENSE
-    serving: hosted # hosted recipes pin no weight files
-    context_tokens: 131072
-    reasoning: true
-    extra_body: {"thinking": {"type": "disabled"}} # sent unchanged with every request
-    reasoning_tokens: 0 # added to every call's max_tokens, for thinking that counts against it
-    stream: true # false sends one non-streamed request
-```
+Every state change writes an event in the same transaction as its data. Each event
+holds the hash of the event before it, so a changed or deleted event breaks the chain. Kittum signs
+checkpoints of the chain with a separate key. A checkpoint also catches a chain that someone
+rewrote from some point on, or cut short.
 
-Kittum asks for every answer as a stream, so a model that thinks for minutes keeps sending and
-never hits the read timeout. Some models count their thinking against `max_tokens`. GLM-5.3-Flash
-on high reasoning does, and it can think through 7,600 of the draft's 12,000 tokens. For such a
-model, set `reasoning_tokens` to the room it needs to think, for example 24000. Kittum adds it to
-the `max_tokens` of every call, and the answer budgets stay the same. The ledger and the AI
-disclosure record it. When the budget still cuts an answer off, Kittum does not ask again with the
-same budget. The attempt fails and says how many tokens the model used, and how many of them went
-to reasoning when the server reports it. If the reasoning used most of them, raise
-`reasoning_tokens`. If the answer took most of them, ask again. GLM sometimes repeats search
-terms until the budget ends.
+### Handover bundle
+
+At the end, the methods lead seals a bundle: a SQLite copy of the ledger, the
+artifacts that may leave, the reports, and a signed manifest. `kittum verify` checks the
+signatures, the chain, and every file hash without a network or a server. Any cell of an exported
+table traces to the accepted value, its place on the PDF, and the person who approved it.
+
+### Screening modes
+
+The protocol sets a mode for each search topic.
+
+- M1: two humans screen every record, and the AI is a third reader. This is the default.
+- M2: one human and the AI screen every record.
+- M3: humans screen in the AI's order and stop when a statistical test passes.
+- S: one human screens each record and can ask another for a second opinion. S is for targeted
+  searches with working documentation. A review that others check for completeness uses M1, M2,
+  or M3.
+
+No mode lets the AI exclude a record that no human saw.
+
+### Sentinels
+
+Sentinels are records whose correct decision is known. Kittum puts them in the
+normal queue, and the reviewers cannot tell them from other records. Missed sentinels show that a
+reviewer's attention has drifted.
+
+### Audit sample
+
+In M1, M2, and M3, the protocol sets a random share of records that an auditor
+screens again. From the sample, Kittum estimates how many relevant records the process missed, with
+an upper bound.
+
+## Configuration
+
+Kittum reads its settings from environment variables. [.env.example](.env.example) lists every
+variable and explains it. The most important ones:
+
+| Variable | What it sets |
+| --- | --- |
+| `KITTUM_DATABASE_URL` | The Postgres database |
+| `KITTUM_ARTIFACT_DIR` | The content-addressed store for PDFs, raw responses, and reports |
+| `KITTUM_LLM_ENDPOINTS` | The model servers, as recipe=URL pairs |
+| `KITTUM_JUDGE_MODEL`, `KITTUM_JUDGE_BACKEND` | The screening judge, and whether it calls a model or replays the demo |
+| `KITTUM_CONTACT_EMAIL` | The address that Crossref, NCBI, and Unpaywall ask for |
+| `KITTUM_WEB_DIST` | The built workbench that `kittum serve` serves |
+| `KITTUM_CHECKPOINT_KEY` | The Ed25519 key that signs checkpoints and bundles |
+
+[Models, recordings, and replay](docs/models-and-recordings.md) covers hosted model recipes, the
+token budget for models that think, the protocol assistant, and how to record a live run and
+replay it.
+
+## Development
+
+[AGENTS.md](AGENTS.md) has the layout and the conventions. These are the checks that CI runs:
 
 ```sh
-export EXAMPLE_PROVIDER_API_KEY=...   # in your shell, not in .env
-export KITTUM_RECIPES_FILE=.kittum/recipes.yaml
-export KITTUM_LLM_ENDPOINTS=example-provider-model=https://api.example-provider.test/v1
-export KITTUM_LLM_API_KEYS=example-provider-model=EXAMPLE_PROVIDER_API_KEY
-export KITTUM_JUDGE_MODEL=example-provider-model
-uv run kittum demo seed --live
+# Server, in apps/server, with KITTUM_DATABASE_URL set for the Postgres tests
+uv run ruff format --check src tests
+uv run ruff check src tests
+uv run ty check src
+uv run pytest
+
+# Workbench and contracts, from the repository root
+pnpm exec playwright install chromium   # once: the browser tests need it
+pnpm check                              # format, lint, typecheck, tests, knip, build
+pnpm contracts:generate                 # after an API change; commit the result
+pnpm --dir apps/web e2e                 # the whole review on the real stack
 ```
 
-The lead writes the protocol in a form, or as YAML, and every save is a revision under their name.
-A model can draft the protocol from a few sentences and suggest changes to one part at a time,
-which the lead accepts change by change. `KITTUM_ASSIST_MODEL` names its recipe (by default the
-judge's), served by one of `KITTUM_LLM_ENDPOINTS`. **Count hits** asks PubMed and
-ClinicalTrials.gov through the gateway.
-`KITTUM_ASSIST_BACKEND=demo` replays the answers recorded in `apps/server/src/kittum/app/demo_data/assist`
-instead; `uv run python -m tests.assist.record_fixtures <recipe>` records them again.
-
-For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
-`kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
-a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migrated database in
-`KITTUM_DATABASE_URL`, with the source gateway answering from the recorded responses in
-`apps/server/tests/enrich/fixtures/stack` (`KITTUM_OFFLINE=1` with `KITTUM_GATEWAY_RECORDINGS`),
-so nothing touches the network. `uv run python -m tests.app.record_stack` in `apps/server` records them again.
-
-## Record a live run, replay it
-
-A live run (real sources, a real model) can be captured once and replayed exactly, for a filmed
-demo or a reproducible test. Recording writes what the sources and the models answered; replaying
-answers every request from those recordings, without a network, a model server, or a key. The
-source and model answers, the counts, the AI readings, the decisions, and the reports match the live
-run. Random draws over record IDs (the auditor's samples, where sentinels are placed) can differ,
-because every run gives its records new IDs: a stratum may sample two records live and three in the
-replay, so the elusion upper bound and the full-text audit items differ too. They match only when
-the replay reuses the live run's database IDs. What people do in the workbench is not recorded:
-replay the same steps.
-
-| Variable                | What it does                                                                                                                                                                                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KITTUM_GATEWAY_RECORD` | A directory. The gateway writes every source response into it (status, `Content-Type`, body), each attempt in order, with a `manifest.json`, the format `KITTUM_GATEWAY_RECORDINGS` reads. Live only: refused with `KITTUM_OFFLINE=1`.                 |
-| `KITTUM_LLM_RECORD`     | A directory, or a file ending in `.json`. Every model completion is written under its request hash, in order, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes, and which recipe judged and which the protocol assistant used. |
-| `KITTUM_LLM_REPLAY`     | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one with no recorded answer left fails naming its request hash. The judge and the protocol assistant use the recipes the live run used, unless `KITTUM_JUDGE_MODEL` or `KITTUM_ASSIST_MODEL` names another. Refused with `KITTUM_LLM_RECORD`.     |
-
-A replay answers in the order the live run was answered: a source that failed twice and then
-answered fails twice and then answers, a connection that failed fails again, and a model asked
-the same thing twice gives its two answers in turn.
-
-Recordings hold no credentials and no personal data. Request headers (where API keys travel) are
-never written, and credential query parameters such as NCBI's `api_key` are dropped. The contact
-address becomes `contact@example.invalid` in the parameter each source takes it in (Crossref's and
-OpenAlex's `mailto`, Unpaywall's and NCBI's `email`), on recording and on lookup alike, so a replay
-finds the responses whatever `KITTUM_CONTACT_EMAIL` it runs with. A request with the address
-anywhere else, a configured key or password in any parameter, or user info in its URL is refused
-before it is sent, naming where, not what. A response body that holds the address or a key is
-cleaned, and the live run gets the cleaned body too, so it and its replay store the same bytes. A
-model completion whose request, answer, or raw bytes hold one is not recorded: the call fails,
-naming the field.
-
-A replay never passes itself off as a live call. The verdicts and transcripts keep the model
-identity that really answered and its serving, and their endpoint, which every verdict, ledger
-event, and AI disclosure carries, reads `replay of <recorded endpoint>`, for example `replay of
-https://api.example-provider.test/v1`.
-
-Recording uses the deployment's live rate limits but a response cache of its own process, so
-every request of the run reaches its source and is written, even one the deployment had cached.
-The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a real judge. So is
-the demo assistant (`KITTUM_ASSIST_BACKEND=demo`), which is refused beside `KITTUM_LLM_REPLAY`
-rather than silently replaced by it or shadowing it: replay the assistant from one recording.
-
-Recording checks every configured key and password before it starts: each must be at least 12
-characters, not a common password, and not part of what Kittum itself sends (PubMed's
-`tool=kittum`, the User-Agent, the placeholder). Otherwise ordinary requests and bodies would hold
-the "secret" and be refused or redacted, so Kittum refuses to start, naming the setting. The dev
-database password `kittum` is such a password: record with a role of its own that has a long one.
-In the compose Postgres:
-
-```sh
-export KITTUM_RECORDER_PASSWORD=$(openssl rand -hex 16)
-docker compose -f infra/compose.yaml exec postgres psql -U kittum -d kittum \
-  -c "create role kittum_recorder login password '$KITTUM_RECORDER_PASSWORD' in role kittum" \
-  -c "alter role kittum_recorder set role kittum"   # what it creates belongs to kittum
-export KITTUM_DATABASE_URL=postgresql://kittum_recorder:$KITTUM_RECORDER_PASSWORD@127.0.0.1:55432/kittum
-```
-
-For example, the demo with a hosted judge, recorded once into `.kittum/demo-run/` and replayed in
-a fresh database:
-
-```sh
-# Record: live sources and the live model, as in "Run Kittum" above, as kittum_recorder.
-export KITTUM_GATEWAY_RECORD=.kittum/demo-run/sources
-export KITTUM_LLM_RECORD=.kittum/demo-run/models
-uv run kittum demo seed --live
-uv run kittum serve & uv run kittum worker   # click through the run; enrichment is recorded too
-
-# Replay: a fresh database, no network, no key. The model comes from the recordings, so the
-# endpoints and keys stay unset; KITTUM_RECIPES_FILE and KITTUM_JUDGE_MODEL stay as they were.
-unset KITTUM_GATEWAY_RECORD KITTUM_LLM_RECORD KITTUM_LLM_ENDPOINTS KITTUM_LLM_API_KEYS
-unset EXAMPLE_PROVIDER_API_KEY
-export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum_replay  # created, migrated
-export KITTUM_OFFLINE=1
-export KITTUM_GATEWAY_RECORDINGS=.kittum/demo-run/sources
-export KITTUM_LLM_REPLAY=.kittum/demo-run/models
-uv run kittum demo seed --live
-uv run kittum serve & uv run kittum worker
-```
+`pnpm dev:web` serves the workbench with hot reload on port 5180 against a running `kittum serve`.
+`VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without a server.
 
 ## Documents
 
-- [Design](DESIGN.md): the pipeline, modules, data model, audit ledger, reviewer UI, stack, and
-  the two-week spike.
-- [Sources](docs/sources.md): free and commercial search and enrichment sources, rate limits,
-  licences, and how federation fits PRISMA-S.
+- [Design](DESIGN.md): how Kittum works and why. Read it before you change behaviour.
+- [Sources](docs/sources.md): search and enrichment sources, their limits, and their licences.
 - [Document and model tools](docs/document-tools.md): PDF parsers, OCR, extraction libraries, and
-  local models, with licence verdicts.
-- [Dependencies](docs/dependencies.md): the licence decision and an evaluation of every dependency
-  for fit, quality, and maintenance.
-- [Standards and regulation](docs/standards.md): what PRISMA, RAISE, the EU AI Act, GDPR, and
-  quality frameworks require of the system.
-- [Profiles](DESIGN.md#profiles): optional agency and jurisdiction rules, with a list of the
-  profiles and their docs.
-- [Work packages](docs/work-packages.md): the build split into independent pieces, with status.
-- [Council record](docs/council.md): how the design was reached, where the council disagreed, and
-  which claims were checked.
+  local models.
+- [Dependencies](docs/dependencies.md): the licence decision and an evaluation of each dependency.
+- [Standards and regulation](docs/standards.md): what PRISMA, RAISE, the EU AI Act, and GDPR
+  require of the system.
+- [Models, recordings, and replay](docs/models-and-recordings.md): hosted models and recorded runs.
 
-## Name
+## Name and logo
 
-Kittum (Akkadian *kittu*, "truth, reliability") was a Babylonian deity, the child of the justice
-god Šamaš. Legal texts invoke Kittum as a witness. The product exists to produce a witnessed,
-checkable record, so the name describes the job. Say it KIT-toom.
+Kittum (Akkadian *kittu*, "truth") was a Babylonian deity whom legal texts call on as a witness.
+Say it KIT-toom. The logo is a stand-in sketch until a hand-painted one replaces it.
 
 ## Licence
 
-Kittum, like the rest of Nebu, is licensed under the
-[GNU Affero General Public License v3.0 or later](../LICENSE).
+Kittum is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
