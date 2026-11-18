@@ -14,7 +14,7 @@ from kittum.core import Id, Record
 from kittum.judge import VERIFIER_LIMITS, instructions_hash
 from kittum.report import appraised
 from kittum.report.extracted import as_csv, as_json
-from kittum.report.prisma import AI_NOTE, flows, retrieval_note, svg
+from kittum.report.prisma import AI_NOTE, flows, not_retrieved, retrieval_note, svg
 from kittum.report.ris_format import ris_dumps, ris_entry
 
 if TYPE_CHECKING:
@@ -67,21 +67,14 @@ def render_prisma(review: Review, scope_id: str | None) -> list[RenderedFile]:
     registry = registry_records(review)
     for f in flows(review, scope_id):
         name = safe_name(f"{f.topic_id}-{f.scope_id}")
-        entries = len(set(f.members.get("reports_not_retrieved", ())) & registry)
+        split = not_retrieved(f, attached=set(review.attached_full_texts), registry=registry)
         drawing = svg(
             f,
             "PRISMA 2020 flow diagram",
             subtitle=flow_subtitle(review, f.topic_id, f.scope_id),
             reasons=exclusion_reasons(review, f.topic_id),
-            registry_not_retrieved=entries,
-            notes=[
-                AI_NOTE,
-                *(
-                    [retrieval_note(f.reports_not_retrieved - entries, entries)]
-                    if f.reports_not_retrieved
-                    else []
-                ),
-            ],
+            not_retrieved=split,
+            notes=[AI_NOTE, *([retrieval_note(split)] if f.reports_not_retrieved else [])],
             warning=unverified(review),
         )
         files.append(json_file(f"{name}.json", f.model_dump(mode="json")))

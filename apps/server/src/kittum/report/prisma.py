@@ -380,30 +380,63 @@ def _arrow(x1: int, y1: int, x2: int, y2: int) -> str:
     )
 
 
-def retrieval_note(articles: int, registry: int) -> str:
-    """What "Reports not retrieved" means at this ledger event, with the open retrieval counted,
-    so a downloaded draft keeps its status: the words Retrieval and Progress use."""
+class NotRetrieved(Record):
+    """The reports not retrieved, by what they wait for: an article that needs a PDF, a report with
+    a PDF attached that full-text screening does not have yet, and a trial registry record with no
+    article yet. The box and its note both read this one split, so they cannot disagree."""
+
+    articles: int = 0
+    attached: int = 0
+    registry: int = 0
+
+    def lines(self) -> list[tuple[str, int]]:
+        """The box's sub-lines with their counts, or none when every report needs a PDF."""
+        if not (self.attached or self.registry):
+            return []
+        given = [
+            ("Article, PDF needed", self.articles),
+            ("PDF attached, not yet screened", self.attached),
+            ("Registry record, no article yet", self.registry),
+        ]
+        return [(label, n) for label, n in given if n]
+
+
+def not_retrieved(f: PrismaFlow, *, attached: set[str], registry: set[str]) -> NotRetrieved:
+    """Split the flow's reports not retrieved: those with a full text attached (`attached`, by
+    item ref), then the trial registry records among the rest (`registry`), then the articles."""
+    refs = set(f.members.get("reports_not_retrieved", ()))
+    with_pdf = refs & attached
+    entries = (refs - with_pdf) & registry
+    return NotRetrieved(
+        articles=len(refs - with_pdf - entries), attached=len(with_pdf), registry=len(entries)
+    )
+
+
+def retrieval_note(split: NotRetrieved) -> str:
+    """What "Reports not retrieved" counts at this ledger event, in the box's words, so a
+    downloaded draft keeps its status."""
 
     def count(n: int, one: str, many: str) -> str:
         return f"{n} {one if n == 1 else many}"
 
-    parts = [
-        *([count(articles, "article needs a PDF", "articles need a PDF")] if articles else []),
-        *(
-            [
-                count(
-                    registry,
-                    "registry record has no article yet",
-                    "registry records have no article yet",
-                )
-            ]
-            if registry
-            else []
+    given = [
+        (split.articles, "article needs a PDF", "articles need a PDF"),
+        (
+            split.attached,
+            "report has a PDF attached and is not yet screened in full text",
+            "reports have a PDF attached and are not yet screened in full text",
+        ),
+        (
+            split.registry,
+            "registry record has no article yet",
+            "registry records have no article yet",
         ),
     ]
+    parts = [count(n, one, many) for n, one, many in given if n]
+    listed = parts[0] if len(parts) == 1 else f"{', '.join(parts[:-1])} and {parts[-1]}"
     return (
-        "Reports not retrieved: reports sought that had no full text in Kittum at this ledger"
-        f" event. Retrieval was still open: {' and '.join(parts)}."
+        "Reports not retrieved: reports sought that were not in full-text screening at this"
+        f" ledger event. Of them, {listed}."
     )
 
 
@@ -426,17 +459,15 @@ def svg(
     reasons: Mapping[str, str] | None = None,
     notes: Sequence[str] = (),
     warning: str | None = None,
-    registry_not_retrieved: int = 0,
+    not_retrieved: NotRetrieved | None = None,
 ) -> str:
     """The flow as a standalone SVG: `title` in bold, then each `subtitle` line wrapped under it
     (the review question the flow answers), and `warning` in red under that (an unverified
     ledger). `reasons` names the exclusion reasons by criterion ID: a figure for publication
     shows a short name, never the ID, and `notes` under the diagram give the full wording and
-    define the AI line, so the exported file explains itself. `registry_not_retrieved` splits the
-    reports not retrieved into articles still without a full text and trial registry entries."""
+    define the AI line, so the exported file explains itself. `not_retrieved` splits the reports
+    not retrieved by what they wait for."""
     left, right = _BAND + 20, _BAND + 20 + _W + _GAP
-    # Of the reports not retrieved, the trial registry entries: no article exists yet.
-    registry = min(registry_not_retrieved, f.reports_not_retrieved)
 
     def sources(*kinds: str) -> list[str]:
         """The sources of a PRISMA 2020 category, each under it with its own count."""
@@ -494,14 +525,7 @@ def svg(
             [f"Reports sought for retrieval: n = {f.reports_sought}"],
             [
                 f"Reports not retrieved: n = {f.reports_not_retrieved}",
-                *(
-                    [
-                        f"  Article, PDF needed: n = {f.reports_not_retrieved - registry}",
-                        f"  Registry record, no article yet: n = {registry}",
-                    ]
-                    if registry
-                    else []
-                ),
+                *(f"  {label}: n = {n}" for label, n in (not_retrieved or NotRetrieved()).lines()),
             ],
         ),
         (

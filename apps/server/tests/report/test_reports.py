@@ -17,7 +17,7 @@ from kittum.corpus import confirm, get_counts, ingest, list_proposals
 from kittum.judge import USER_TEMPLATE, VERIFIER_LIMITS
 from kittum.models import weights_hash
 from kittum.report import flow, load_review, one_line, render, render_files
-from kittum.report.prisma import svg
+from kittum.report.prisma import not_retrieved, retrieval_note, svg
 from kittum.report.prisma import svg as prisma_svg
 from kittum.report.renderers import exclusion_reasons, registry_records
 from kittum.screening import Decision
@@ -215,8 +215,8 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
     notes = " ".join(part("note"))
     assert "* With AI involvement: people excluded the record, and the AI also proposed it" in notes
     assert "'" not in " ".join(t or "" for t in texts)  # typographic apostrophes in a figure
-    assert "Reports not retrieved: reports sought that had no full text in Kittum" in notes
-    assert "Retrieval was still open: 1 article needs a PDF." in notes
+    assert "Reports not retrieved: reports sought that were not in full-text screening" in notes
+    assert "ledger event. Of them, 1 article needs a PDF." in notes
     ids = [NRT_SCOPE, "TRIALS", *(c.id for c in world.criteria("full_text"))]
     assert not [i for i in ids if i in words], ids
     # The lines of PRISMA 2020's template stay even when they can only say zero: no screening
@@ -737,9 +737,52 @@ def test_the_flow_tells_registry_records_from_articles_still_without_a_full_text
     harbour = world.record(TXA_TITLES["ctis_harbour"]).item_ref
     assert harbour in registry_records(review)
     # With one registry record among them, the box splits the four.
-    at = lines(svg(f, "PRISMA 2020 flow diagram", registry_not_retrieved=1)).index
+    split = not_retrieved(f, attached=set(), registry={harbour})
+    at = lines(svg(f, "PRISMA 2020 flow diagram", not_retrieved=split)).index
     assert (
         at("Reports not retrieved: n = 4")
         < at("  Article, PDF needed: n = 3")
         < at("  Registry record, no article yet: n = 1")
     )
+    assert retrieval_note(split).endswith(
+        "Of them, 3 articles need a PDF and 1 registry record has no article yet."
+    )
+
+
+def test_a_pdf_attached_before_full_text_opens_is_not_counted_as_needed(
+    tranexamic: ReviewWorld,
+) -> None:
+    """A PDF attached before full-text screening opens leaves its report not retrieved, as the box
+    counts it, and the box and its note say a PDF is there."""
+    world = tranexamic
+    with world.db.transaction() as tx:
+        opened = tx.execute(
+            "select e.seq from screening_stage s join audit_event e on e.event_id ="
+            " s.opened_event_id where s.project_id = %s and s.stage = 'full_text'",
+            (world.project_id,),
+        ).fetchone()
+    assert opened is not None
+    review = review_at(world, opened["seq"] - 1)
+    f = flow(review, "RCT", TXA_SCOPE)
+    harbour = world.record(TXA_TITLES["ctis_harbour"]).item_ref
+    article = next(r for r in f.members["reports_not_retrieved"] if r != harbour)
+    attached = review.model_copy(update={"attached_full_texts": frozenset({article})})
+    files = {r.path: r.data for r in render_files(attached, "prisma", TXA_SCOPE)}
+    shown = [
+        t.text
+        for t in ET.fromstring(files[f"RCT-{TXA_SCOPE}.svg"]).iter(
+            "{http://www.w3.org/2000/svg}text"
+        )
+    ]
+    at = shown.index
+    assert (
+        at("Reports not retrieved: n = 4")
+        < at("  Article, PDF needed: n = 2")
+        < at("  PDF attached, not yet screened: n = 1")
+        < at("  Registry record, no article yet: n = 1")
+    )
+    note = " ".join(t or "" for t in shown[at("  Registry record, no article yet: n = 1") :])
+    assert (
+        "Of them, 2 articles need a PDF, 1 report has a PDF attached and is not yet screened in"
+        " full text and 1 registry record has no article yet."
+    ) in " ".join(note.split())

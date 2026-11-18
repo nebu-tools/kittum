@@ -72,6 +72,8 @@ CORPUS_INGESTED = "corpus.ingested"
 
 # Adapter names of the core search sources, mapped to the protocol source IDs they serve.
 ASSIST_EVENT = "protocol.assist"  # `kittum.assist` writes it; the report only reads the ledger
+FULL_TEXT_ATTACHED = "project.full_text_attached"  # `kittum.app` writes these two
+FULL_TEXT_DETACHED = "project.full_text_detached"
 
 SOURCE_ALIASES: dict[str, str] = {
     "pubmed": "medline",
@@ -388,6 +390,8 @@ class Review(Record):
     """The fields of the protocol in force that a model wrote, as its publication recorded them."""
     assist_requests: tuple[dict[str, Any], ...] = ()
     """Every request to the protocol assistant through the cutoff (`protocol.assist` payloads)."""
+    attached_full_texts: frozenset[str] = frozenset()
+    """The reports with a full text attached at the cutoff, by item ref."""
     prompts: tuple[PromptCard, ...] = ()
     """What each AI role sent its model, read from the stored requests; empty without a store."""
     extracted: tuple[ExtractedValue, ...] = ()
@@ -499,6 +503,7 @@ def load_review(
             )
         ),
         assist_requests=tuple(e.payload for e in events if e.type == ASSIST_EVENT),
+        attached_full_texts=_attached(events),
         prompts=prompt_cards(
             tx,
             project_id,
@@ -598,6 +603,17 @@ def _label(outcome: str | None) -> str:
 
 
 CONFLICT_EVENTS = frozenset({CONFLICT_OPENED, CONFLICT_UPDATED, CONFLICT_WITHDRAWN, ADJUDICATED})
+
+
+def _attached(events: Iterable[AuditEvent]) -> frozenset[str]:
+    """The item refs with a full text attached after `events`: attached and not detached since."""
+    attached: set[str] = set()
+    for e in events:
+        if e.type == FULL_TEXT_ATTACHED:
+            attached.add(str(e.payload["item_ref"]))
+        elif e.type == FULL_TEXT_DETACHED:
+            attached.discard(str(e.payload["item_ref"]))
+    return frozenset(attached)
 
 
 def conflict_states(events: Iterable[tuple[str, dict[str, Any], Id]]) -> dict[str, dict[str, Any]]:

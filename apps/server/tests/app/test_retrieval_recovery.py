@@ -45,7 +45,7 @@ from kittum.enrich.pmc import IDCONV
 from kittum.gateway import HttpRequest, HttpxTransport, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
 from kittum.ledger import EventDraft, PostgresLedger, SigningKey
-from kittum.report import seal_bundle
+from kittum.report import load_review, seal_bundle
 from kittum.runs import JobSpec, PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
@@ -575,6 +575,15 @@ def test_fetching_again_never_brings_back_a_pdf_a_reviewer_called_the_wrong_docu
 
     # A reviewer says the PDF is not the trial's report, although it shows the trial's DOI.
     _detach(review, lesotho, "This is the protocol paper, not the trial's results.")
+    # The reports read from the ledger which full texts are attached, as the table holds them.
+    held = {
+        str(r["item_ref"])
+        for r in pg.execute("select item_ref from full_text where project_id = %s", (review.pid,))
+    }
+    with review.db.transaction() as tx:
+        read = load_review(tx, UUID(review.pid), ledger=review.ledger).attached_full_texts
+    assert held and lesotho not in held
+    assert read == held
     review.post("retrieval/open-access")
     assert review.work() == 1
     again = {r["report_id"]: r for r in review.get("retrieval/open-access/latest")["reports"]}
