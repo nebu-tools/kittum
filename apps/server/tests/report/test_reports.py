@@ -216,8 +216,7 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
     notes = " ".join(part("note"))
     assert "* With AI involvement: people excluded the record, and the AI also proposed it" in notes
     assert "'" not in " ".join(t or "" for t in texts)  # typographic apostrophes in a figure
-    assert "Reports not retrieved: reports sought that were not in full-text screening" in notes
-    assert "ledger event. Of them, 1 article needs a PDF." in notes
+    assert " ".join(RETRIEVAL_NOTE.split()) in " ".join(notes.split())
     ids = [NRT_SCOPE, "TRIALS", *(c.id for c in world.criteria("full_text"))]
     assert not [i for i in ids if i in words], ids
     # The lines of PRISMA 2020's template stay even when they can only say zero: no screening
