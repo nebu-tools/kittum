@@ -58,6 +58,7 @@ from tests.app.record_stack import GUIDELINE_REFERENCES, STACK
 from tests.documents.conftest import FIXTURES as PDF_FIXTURES
 from tests.documents.conftest import savepoint_db
 from tests.enrich.support import CONTACT_EMAIL, FIXTURES
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -162,19 +163,7 @@ class Review:
         self.sam = self.ok(self.client.post(f"/api/projects/{self.pid}/members", json=body), 201)[
             "actor_id"
         ]
-        version = self.ok(
-            self.client.post(
-                f"/api/projects/{self.pid}/protocol-versions",
-                json=yaml.safe_load(PROTOCOL.read_text()),
-            ),
-            201,
-        )
-        self.ok(
-            self.client.post(
-                f"/api/projects/{self.pid}/protocol-versions/{version['id']}/publish",
-                json={"approved_by": self.lead},
-            )
-        )
+        publish_through_api(self.client, self.pid, yaml.safe_load(PROTOCOL.read_text()), self.lead)
         for source, path in (
             ("citation_search", DATA / "citation_search.ris"),
             ("guideline_references", GUIDELINE_REFERENCES),

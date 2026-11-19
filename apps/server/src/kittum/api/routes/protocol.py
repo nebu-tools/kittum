@@ -1,9 +1,13 @@
 """Protocol routes: parse and validate a source, preview its diff against the published version,
-save a draft, publish it, and read versions back. The example protocols of a checkout are served
-as starting points."""
+write the project's one open draft and publish it, and read versions back. The example protocols
+of a checkout are served as starting points.
+
+Saving a draft needs no role, as editing the protocol never has; publishing needs the project
+lead. A save, discard, or publication that names an old revision of the draft is a 409 with the
+draft as it is now (`draft` is null when it was published or discarded)."""
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import Field
@@ -23,19 +27,26 @@ from kittum.core import Id, NotFoundError, Record
 from kittum.protocol import (
     DocumentationLevel,
     ProtocolDiff,
+    ProtocolDraft,
     ProtocolError,
     ProtocolIssue,
     ProtocolStateError,
     ReviewProtocol,
+    StaleDraft,
     StoredProtocol,
     compile,
     diff,
+    discard_draft,
+    get_draft,
     get_version,
+    labelled,
     latest_published,
     list_versions,
+    next_label,
     protocol_warnings,
-    publish,
+    publish_draft,
     save_draft,
+    start_draft,
 )
 
 router = APIRouter(prefix="/api", tags=["protocol"])
@@ -66,7 +77,20 @@ class ParsedSource(Record):
     issues: tuple[ProtocolIssue, ...] = ()
 
 
-class PublishRequest(Record):
+class DraftStart(Record):
+    source: str | None = None
+    """The text to start from; the published version as YAML when omitted."""
+    base_revision_id: Id | None = None
+
+
+class DraftSave(Record):
+    revision: int
+    """The revision the text was written on."""
+    source: str
+
+
+class DraftPublish(Record):
+    revision: int
     approved_by: Id
     reason: str | None = None
 
@@ -74,11 +98,10 @@ class PublishRequest(Record):
 class ProtocolVersionSummary(Record):
     id: Id
     parent_id: Id | None
-    status: Literal["draft", "published"]
     version_label: str
     content_hash: str
     created_at: datetime
-    published_at: datetime | None
+    published_at: datetime
 
 
 class DiffPreview(Record):
@@ -86,6 +109,8 @@ class DiffPreview(Record):
     `previous` and `diff` are None before the first version."""
 
     content_hash: str
+    version_label: str
+    """The label the source would be published under."""
     previous: ProtocolVersionSummary | None
     diff: ProtocolDiff | None
 
@@ -96,6 +121,8 @@ class PublishedProtocol(Record):
     stored: StoredProtocol
     documentation: dict[str, DocumentationLevel]
     """Each search topic's documentation level, by topic ID."""
+    next_label: str
+    """The label the next version is published under."""
 
 
 def _documentation(protocol: ReviewProtocol) -> dict[str, DocumentationLevel]:
@@ -112,11 +139,17 @@ def _invalid(e: ProtocolError) -> HTTPException:
     )
 
 
+def _stale(e: StaleDraft) -> HTTPException:
+    return HTTPException(
+        status.HTTP_409_CONFLICT,
+        {"message": str(e), "draft": e.current.model_dump(mode="json") if e.current else None},
+    )
+
+
 def _summary(s: StoredProtocol) -> ProtocolVersionSummary:
     return ProtocolVersionSummary(
         id=s.id,
         parent_id=s.parent_id,
-        status=s.status,
         version_label=s.version.protocol.version_label,
         content_hash=s.version.content_hash,
         created_at=s.created_at,
@@ -164,40 +197,73 @@ def validate_protocol(source: ProtocolSource) -> ValidationReport:
     )
 
 
-@router.post(
-    "/projects/{project_id}/protocol-versions",
-    operation_id="saveProtocolDraft",
-    status_code=status.HTTP_201_CREATED,
-)
-def save_protocol_draft(project_id: Id, source: ProtocolSource, ctx: Context) -> StoredProtocol:
-    try:
-        version = compile(source)
-    except ProtocolError as e:
-        raise _invalid(e) from None
+@router.get("/projects/{project_id}/protocol-draft", operation_id="getProtocolDraft")
+def get_protocol_draft(project_id: Id, ctx: Context) -> ProtocolDraft:
+    """The project's open draft; 404 when none is open."""
     with ctx.db.transaction() as tx:
-        return save_draft(tx, project_id, version)
+        draft = get_draft(tx, project_id)
+    if draft is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no draft is open")
+    return draft
 
 
-@router.post(
-    "/projects/{project_id}/protocol-versions/{version_id}/publish",
-    operation_id="publishProtocolVersion",
+@router.post("/projects/{project_id}/protocol-draft", operation_id="startProtocolDraft")
+def start_protocol_draft(project_id: Id, request: DraftStart, ctx: Context) -> ProtocolDraft:
+    """Open the project's draft, or return the one already open, unchanged. Without a source
+    it starts from the published version; 422 if none is published."""
+    with ctx.db.transaction() as tx:
+        source = request.source
+        if source is None:
+            try:
+                source = protocol_source(tx, project_id)
+            except LifecycleError as e:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+        return start_draft(tx, project_id, source, request.base_revision_id)
+
+
+@router.put("/projects/{project_id}/protocol-draft", operation_id="saveProtocolDraft")
+def save_protocol_draft(project_id: Id, request: DraftSave, ctx: Context) -> ProtocolDraft:
+    try:
+        with ctx.db.transaction() as tx:
+            return save_draft(tx, project_id, request.revision, request.source)
+    except StaleDraft as e:
+        raise _stale(e) from None
+
+
+@router.delete(
+    "/projects/{project_id}/protocol-draft",
+    operation_id="discardProtocolDraft",
+    status_code=status.HTTP_204_NO_CONTENT,
 )
-def publish_protocol_version(
-    project_id: Id, version_id: Id, request: PublishRequest, ctx: Context
-) -> StoredProtocol:
+def discard_protocol_draft(project_id: Id, revision: int, ctx: Context) -> None:
+    try:
+        with ctx.db.transaction() as tx:
+            discard_draft(tx, project_id, revision)
+    except StaleDraft as e:
+        raise _stale(e) from None
+
+
+@router.post("/projects/{project_id}/protocol-draft/publish", operation_id="publishProtocolDraft")
+def publish_protocol_draft(project_id: Id, request: DraftPublish, ctx: Context) -> StoredProtocol:
+    """Publish the draft with the lead's approval, under the label Kittum assigns, and delete it,
+    in one transaction. 422 if it does not compile."""
     if ctx.ledger is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "no ledger is configured")
     try:
         with ctx.db.transaction() as tx:
             require_project_lead(tx, project_id, request.approved_by)
-            return publish(
+            return publish_draft(
                 tx,
                 project_id,
-                version_id,
+                request.revision,
                 request.approved_by,
                 ledger=ctx.ledger,
                 reason=request.reason,
             )
+    except StaleDraft as e:
+        raise _stale(e) from None
+    except ProtocolError as e:
+        raise _invalid(e) from None
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
     except NotLead as e:
@@ -212,7 +278,11 @@ def get_published_protocol(project_id: Id, ctx: Context) -> PublishedProtocol:
         stored = latest_published(tx, project_id)
     if stored is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol is published yet")
-    return PublishedProtocol(stored=stored, documentation=_documentation(stored.version.protocol))
+    return PublishedProtocol(
+        stored=stored,
+        documentation=_documentation(stored.version.protocol),
+        next_label=next_label(stored.version.protocol.version_label),
+    )
 
 
 @router.get("/projects/{project_id}/protocol/source", operation_id="getPublishedProtocolSource")
@@ -235,8 +305,10 @@ def preview_diff(project_id: Id, source: ProtocolSource, ctx: Context) -> DiffPr
         raise _invalid(e) from None
     with ctx.db.transaction() as tx:
         stored = latest_published(tx, project_id)
+    version = labelled(version, stored)
     return DiffPreview(
         content_hash=version.content_hash,
+        version_label=version.protocol.version_label,
         previous=_summary(stored) if stored else None,
         diff=diff(stored.version, version) if stored else None,
     )

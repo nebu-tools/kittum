@@ -46,11 +46,9 @@ import {
   strategyPath,
   toDoc,
   valueAt,
-  comesAfter,
-  nextLabel,
-  startDraft,
   withPreset,
 } from "./document.ts";
+import type { Draft } from "./draft.ts";
 import type { Preset } from "./document.ts";
 import type { Criterion, Doc, Localized, Question, Source, Topic } from "./document.ts";
 
@@ -64,6 +62,9 @@ export interface Working {
 export interface Handover {
   readonly working: Working | null;
   readonly selected: string | null;
+  /** The revision `working` was edited from, by ID, when only the ID is known, as for the open
+   * draft the server holds; the form finds it in the history. */
+  readonly baseId?: string | null;
 }
 
 /** What the form shows, and whether it may hand over to YAML: not while it loads its revisions,
@@ -171,6 +172,7 @@ export function Assistant({
   barSlot,
   handover,
   paused,
+  draft,
   onCurrent,
   onPublished,
 }: {
@@ -181,6 +183,8 @@ export function Assistant({
   paused: boolean;
   /** Where to open: the form as the lead left it, or a protocol from the YAML view. */
   handover: Handover | null;
+  /** The project's open draft, which every change to the form is saved to. */
+  draft: Draft;
   /** Where the form is and what it shows, so the YAML view opens the same protocol and the
    * form comes back to the same place. */
   onCurrent: (current: FormState) => void;
@@ -201,6 +205,7 @@ export function Assistant({
   const [at, setAt] = useState(0);
   const [working, setWorking] = useState<Working | null>(handover?.working ?? null);
   const [selected] = useState(handover?.selected ?? null);
+  const [baseId] = useState(handover?.baseId ?? null);
   const [issues, setIssues] = useState<ReadonlyArray<ProtocolIssue>>([]);
   const [saving, setSaving] = useState(false);
   const [model, setModel] = useState<AssistModel | null>(null);
@@ -228,6 +233,8 @@ export function Assistant({
         setRevisions(found);
         const index = selected ? found.findIndex((r) => r.id === selected) : -1;
         setAt(index >= 0 ? index : Math.max(0, found.length - 1));
+        const base = baseId ? found.find((r) => r.id === baseId) : undefined;
+        if (base) setWorking((w) => (w && !w.base ? { ...w, base } : w));
       },
       (e) => live && setError(failure(e, "Kittum could not load the revisions.")),
     );
@@ -238,7 +245,7 @@ export function Assistant({
     return () => {
       live = false;
     };
-  }, [workbench, caller, selected]);
+  }, [workbench, caller, selected, baseId]);
 
   const count = useCallback(
     (dialect: QueryDialect, strategy: string) => {
@@ -301,21 +308,17 @@ export function Assistant({
       "Kittum could not restore the revision.",
     );
 
-  const inForce = protocol?.protocol.version_label ?? null;
-  // The first change starts a new draft from the revision shown. Unless that change is to the
-  // label, the draft takes the label after the version in force.
-  const edit = (doc: Doc) =>
-    setWorking(
-      working
-        ? { doc, base: working.base }
-        : {
-            doc:
-              current && doc.version_label !== docOf(current).version_label
-                ? doc
-                : startDraft(doc, inForce),
-            base: current,
-          },
-    );
+  // The first change starts the unsaved protocol from the revision shown. Every change goes to
+  // the open draft, so another lead, or this one after a reload, finds it.
+  const edit = (doc: Doc) => {
+    const base = working ? working.base : current;
+    setWorking({ doc, base });
+    draft.change(JSON.stringify(forSaving(doc)), base?.id ?? null);
+  };
+
+  /** The unsaved protocol is gone from the form: saved as a revision, replaced, or dropped. */
+  const closeDraft = () =>
+    draft.discard().catch((e) => setError(failure(e, "Kittum could not discard the draft.")));
 
   const save = async () => {
     if (!working || saving) return;
@@ -333,6 +336,7 @@ export function Assistant({
       );
       setWorking(null);
       setIssues([]);
+      await closeDraft();
       await reload(saved.id);
     } catch (e) {
       setError(failure(e, "Kittum could not save the revision."));
@@ -345,6 +349,7 @@ export function Assistant({
     setWorking(null);
     setIssues([]);
     setError(null);
+    void closeDraft();
   };
 
   // Ctrl+Enter saves the form from anywhere on the screen, a field included.
@@ -367,7 +372,7 @@ export function Assistant({
     return false;
   });
 
-  const draft = async (description: string) => {
+  const askForDraft = async (description: string) => {
     setDrafting(true);
     setFailed(null);
     setError(null);
@@ -376,6 +381,7 @@ export function Assistant({
       if (outcome.revision) {
         setDescribing(false);
         setWorking(null);
+        await closeDraft();
         await reload(outcome.revision.id);
       } else setFailed(outcome);
     } catch (e) {
@@ -392,8 +398,7 @@ export function Assistant({
         workbench.parseProtocol(await run(workbench.protocolSource(project.id))),
       );
       const read = parsed.source ? toDoc(parsed.source) : null;
-      if (read && "doc" in read)
-        setWorking({ doc: startDraft(read.doc, inForce ?? read.doc.version_label), base: null });
+      if (read && "doc" in read) setWorking({ doc: read.doc, base: null });
       else setError(read?.problem ?? "Kittum could not read the published version.");
     } catch (e) {
       setError(failure(e, "Kittum could not load the published version."));
@@ -410,7 +415,7 @@ export function Assistant({
         failed={failed}
         error={error}
         model={model}
-        onDraft={draft}
+        onDraft={askForDraft}
         onCancel={() => {
           setFailed(null);
           setDescribing(false);
@@ -533,23 +538,8 @@ export function Assistant({
               <div className="rounded-[4px] bg-sheet-2 px-4 py-4">
                 <Provenance revision={current} revisions={revisions} people={people} />
                 <Publish
-                  versionLabel={docOf(current).version_label}
-                  inForce={inForce}
-                  onRelabel={(label) =>
-                    act(
-                      async () =>
-                        (
-                          await run(
-                            workbench.saveRevision({
-                              ...caller,
-                              source: forSaving({ ...docOf(current), version_label: label }),
-                              baseId: current.id,
-                            }),
-                          )
-                        ).id,
-                      "Kittum could not save the new version label.",
-                    )
-                  }
+                  versionLabel={protocol?.next_label ?? docOf(current).version_label}
+                  inForce={protocol?.protocol.version_label ?? null}
                   onPublish={async (reason) => {
                     const stored = await run(
                       workbench.publishRevision({ ...caller, revisionId: current.id, reason }),
@@ -1111,8 +1101,8 @@ function FormView({
                 <>
                   <span className="font-semibold" data-testid="unsaved">
                     {base
-                      ? `Your changes to revision ${base.seq}, not saved yet`
-                      : "A new protocol, not saved yet"}
+                      ? `Your changes to revision ${base.seq}, not saved as a revision`
+                      : "A new protocol, not saved as a revision"}
                   </span>
                   <span className="ml-auto flex items-center gap-2">
                     <Button
@@ -2158,7 +2148,7 @@ function Unsaved({
   const { me } = useProject();
   return (
     <section data-testid="unsaved-panel" className="rounded-[4px] bg-sheet-2 px-4 py-4">
-      <h2 className="text-md font-semibold">Not saved yet</h2>
+      <h2 className="text-md font-semibold">Not saved as a revision</h2>
       <p className="mt-1 text-sm text-ink-2">
         {working.base
           ? `You are changing revision ${working.base.seq}.`
@@ -2742,25 +2732,19 @@ function WordDiff({ before, after }: { before: string; after: string }) {
 function Publish({
   versionLabel,
   inForce,
-  onRelabel,
   onPublish,
 }: {
-  /** The version label the revision carries: what the published protocol will be called. */
+  /** The label Kittum publishes the revision under: the one after the version in force, or the
+   * revision's own before the first publication. */
   versionLabel: string;
   /** The label of the version in force, or null before the first publication. */
   inForce: string | null;
-  /** Saves the revision again under another version label, as a new revision. */
-  onRelabel: (label: string) => Promise<unknown> | undefined;
   onPublish: (reason: string | null) => Promise<void>;
 }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [relabelling, setRelabelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A draft whose label does not come after the one in force would publish a version that
-  // repeats it or goes back.
-  const repeats = inForce !== null && !comesAfter(versionLabel, inForce);
-  const blocked = busy || !reason.trim() || repeats;
+  const blocked = busy || !reason.trim();
   return (
     <form
       className="mt-4 grid gap-2.5 border-t border-rule pt-3"
@@ -2785,49 +2769,13 @@ function Publish({
           className="resize-y"
         />
       </Field>
-      {repeats ? (
-        <p
-          className="flex items-start gap-2 text-sm text-marker-edge"
-          data-testid="version-repeats"
-        >
-          <span
-            className="mark bg-marker-soft shadow-[inset_0_0_0_1px_var(--marker-edge)]"
-            aria-hidden="true"
-          >
-            !
-          </span>
-          <span className="grid gap-2">
-            <span>
-              This draft is labelled version {versionLabel}, which does not come after version{" "}
-              {inForce}, the one in force.
-            </span>
-            <span>
-              <Button
-                size="sm"
-                disabled={relabelling}
-                onClick={() => {
-                  setRelabelling(true);
-                  void Promise.resolve(onRelabel(nextLabel(inForce ?? versionLabel))).finally(() =>
-                    setRelabelling(false),
-                  );
-                }}
-              >
-                {relabelling
-                  ? "Saving"
-                  : `Use ${nextLabel(inForce ?? versionLabel)} and save as a new revision`}
-              </Button>
-            </span>
-          </span>
-        </p>
-      ) : (
-        <p className="text-sm text-ink-2" data-testid="publishes-as">
-          Publishing makes this draft protocol version {versionLabel}
-          {inForce ? `, after version ${inForce}` : ""}. Every decision reads it from then on.
-        </p>
-      )}
+      <p className="text-sm text-ink-2" data-testid="publishes-as">
+        Publishing makes this draft protocol version {versionLabel}
+        {inForce ? `, after version ${inForce}` : ""}. Every decision reads it from then on.
+      </p>
       <div className="flex items-center gap-3">
         <Button kind="primary" type="submit" disabled={blocked}>
-          {busy ? "Publishing" : repeats ? "Publish" : `Publish version ${versionLabel}`}
+          {busy ? "Publishing" : `Publish version ${versionLabel}`}
         </Button>
       </div>
       {error ? (

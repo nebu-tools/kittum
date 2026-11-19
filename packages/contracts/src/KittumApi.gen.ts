@@ -211,6 +211,8 @@ export type SecondOpinionGauge = { readonly "changed": number, readonly "kept": 
 export const SecondOpinionGauge = Schema.Struct({ "changed": Schema.Number.annotate({ "title": "Changed" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "kept": Schema.Number.annotate({ "title": "Kept" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "pending": Schema.Number.annotate({ "title": "Pending" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "requested": Schema.Number.annotate({ "title": "Requested" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "SecondOpinionGauge", "description": "Mode S: decisions a screener asked a second opinion on. The second screener saw the first\ndecision, so these are consults, not independent screens.", "identifier": "SecondOpinionGauge" })
 export type StopStatus = { readonly "alpha": number, readonly "method": string, readonly "minimum_met": boolean, readonly "minimum_screened_percent": string, readonly "p_value": number, readonly "pending_conflicts": number, readonly "relevant": number, readonly "remaining": number, readonly "screened": number, readonly "stop": boolean, readonly "target_recall": number, readonly "verdict": "stop" | "continue" | "pending_conflicts" }
 export const StopStatus = Schema.Struct({ "alpha": Schema.Number.annotate({ "title": "Alpha" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "method": Schema.String.annotate({ "title": "Method" }), "minimum_met": Schema.Boolean.annotate({ "title": "Minimum Met" }), "minimum_screened_percent": Schema.String.annotate({ "title": "Minimum Screened Percent" }), "p_value": Schema.Number.annotate({ "title": "P Value" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "pending_conflicts": Schema.Number.annotate({ "title": "Pending Conflicts" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "relevant": Schema.Number.annotate({ "title": "Relevant" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "remaining": Schema.Number.annotate({ "title": "Remaining" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "screened": Schema.Number.annotate({ "title": "Screened" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "stop": Schema.Boolean.annotate({ "title": "Stop" }), "target_recall": Schema.Number.annotate({ "title": "Target Recall" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "verdict": Schema.Literals(["stop", "continue", "pending_conflicts"]).annotate({ "title": "Verdict" }) }).annotate({ "title": "StopStatus", "identifier": "StopStatus" })
+export type DraftSave = { readonly "revision": number, readonly "source": string }
+export const DraftSave = Schema.Struct({ "revision": Schema.Number.annotate({ "title": "Revision" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "source": Schema.String.annotate({ "title": "Source" }) }).annotate({ "title": "DraftSave", "identifier": "DraftSave" })
 export type SourceText = { readonly "text": string }
 export const SourceText = Schema.Struct({ "text": Schema.String.annotate({ "title": "Text" }) }).annotate({ "title": "SourceText", "identifier": "SourceText" })
 export type SealedBundle = { readonly "cutoff_seq": number, readonly "key_id": string, readonly "manifest_hash": string, readonly "path": string }
@@ -321,10 +323,14 @@ export type ReportSummary = { readonly "citation": string, readonly "id": Id, re
 export const ReportSummary = Schema.Struct({ "citation": Schema.String.annotate({ "title": "Citation" }), "id": Id, "licence": Schema.String.annotate({ "title": "Licence" }), "study_id": Id, "study_label": Schema.String.annotate({ "title": "Study Label" }), "title": Schema.String.annotate({ "title": "Title" }) }).annotate({ "title": "ReportSummary", "identifier": "ReportSummary" })
 export type FullText = { readonly "document_id": Id, readonly "item_ref": string, readonly "layer_id": Id, readonly "licence": string | null, readonly "page_count": number | null }
 export const FullText = Schema.Struct({ "document_id": Id, "item_ref": Schema.String.annotate({ "title": "Item Ref" }), "layer_id": Id, "licence": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Licence" }), "page_count": Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Page Count" }) }).annotate({ "title": "FullText", "identifier": "FullText" })
-export type ProtocolVersionSummary = { readonly "content_hash": string, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "published_at": string | null, readonly "status": "draft" | "published", readonly "version_label": string }
-export const ProtocolVersionSummary = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "published_at": Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" }), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "ProtocolVersionSummary", "identifier": "ProtocolVersionSummary" })
-export type PublishRequest = { readonly "approved_by": Id, readonly "reason"?: string | null }
-export const PublishRequest = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })) }).annotate({ "title": "PublishRequest", "identifier": "PublishRequest" })
+export type ProtocolDraft = { readonly "base_revision_id": Id | null, readonly "created_at": string, readonly "project_id": Id, readonly "revision": number, readonly "source": string, readonly "updated_at": string }
+export const ProtocolDraft = Schema.Struct({ "base_revision_id": Schema.Union([Id, Schema.Null]), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "project_id": Id, "revision": Schema.Number.annotate({ "title": "Revision" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "source": Schema.String.annotate({ "title": "Source" }), "updated_at": Schema.String.annotate({ "title": "Updated At", "format": "date-time" }) }).annotate({ "title": "ProtocolDraft", "identifier": "ProtocolDraft" })
+export type DraftStart = { readonly "base_revision_id"?: Id | null, readonly "source"?: string | null }
+export const DraftStart = Schema.Struct({ "base_revision_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "source": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Source" })) }).annotate({ "title": "DraftStart", "identifier": "DraftStart" })
+export type DraftPublish = { readonly "approved_by": Id, readonly "reason"?: string | null, readonly "revision": number }
+export const DraftPublish = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })), "revision": Schema.Number.annotate({ "title": "Revision" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "DraftPublish", "identifier": "DraftPublish" })
+export type ProtocolVersionSummary = { readonly "content_hash": string, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "published_at": string, readonly "version_label": string }
+export const ProtocolVersionSummary = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "published_at": Schema.String.annotate({ "title": "Published At", "format": "date-time" }), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "ProtocolVersionSummary", "identifier": "ProtocolVersionSummary" })
 export type SealRequest = { readonly "actor_id": Id, readonly "cutoff_seq"?: number | null, readonly "withhold_sources"?: { readonly [x: string]: string } }
 export const SealRequest = Schema.Struct({ "actor_id": Id, "cutoff_seq": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Cutoff Seq" })), "withhold_sources": Schema.optionalKey(Schema.Record(Schema.String, Schema.String).annotate({ "title": "Withhold Sources" })) }).annotate({ "title": "SealRequest", "identifier": "SealRequest" })
 export type RenderRequest = { readonly "actor_id": Id, readonly "cutoff_seq"?: number | null, readonly "identity_revision_id"?: Id | null, readonly "scope_id"?: string | null }
@@ -587,8 +593,8 @@ export type CorpusView = { readonly "links"?: ReadonlyArray<CorpusLink>, readonl
 export const CorpusView = Schema.Struct({ "links": Schema.optionalKey(Schema.Array(CorpusLink).annotate({ "title": "Links", "default": [] })), "reports": Schema.Array(CorpusReport).annotate({ "title": "Reports" }), "revision": IdentityRevision, "searches": Schema.optionalKey(Schema.Array(CorpusSearch).annotate({ "title": "Searches", "default": [] })) }).annotate({ "title": "CorpusView", "description": "The newest identity revision: every report with its records and study, the searches the\nrecords came from, and why linked records are together.", "identifier": "CorpusView" })
 export type RenderedArtifact = { readonly "artifact": Artifact, readonly "sha256": string }
 export const RenderedArtifact = Schema.Struct({ "artifact": Artifact, "sha256": Schema.String.annotate({ "title": "Sha256" }) }).annotate({ "title": "RenderedArtifact", "identifier": "RenderedArtifact" })
-export type DiffPreview = { readonly "content_hash": string, readonly "diff": ProtocolDiff | null, readonly "previous": ProtocolVersionSummary | null }
-export const DiffPreview = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "diff": Schema.Union([ProtocolDiff, Schema.Null]), "previous": Schema.Union([ProtocolVersionSummary, Schema.Null]) }).annotate({ "title": "DiffPreview", "description": "What publishing a source would change against the version every decision reads now;\n`previous` and `diff` are None before the first version.", "identifier": "DiffPreview" })
+export type DiffPreview = { readonly "content_hash": string, readonly "diff": ProtocolDiff | null, readonly "previous": ProtocolVersionSummary | null, readonly "version_label": string }
+export const DiffPreview = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "diff": Schema.Union([ProtocolDiff, Schema.Null]), "previous": Schema.Union([ProtocolVersionSummary, Schema.Null]), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "DiffPreview", "description": "What publishing a source would change against the version every decision reads now;\n`previous` and `diff` are None before the first version.", "identifier": "DiffPreview" })
 export type AppraisableReport = { readonly "appraisals": ReadonlyArray<AppraisalSummary>, readonly "journal": string | null, readonly "report_id": Id, readonly "study_id": Id, readonly "study_label": string, readonly "title": string, readonly "year": number | null }
 export const AppraisableReport = Schema.Struct({ "appraisals": Schema.Array(AppraisalSummary).annotate({ "title": "Appraisals" }), "journal": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Journal" }), "report_id": Id, "study_id": Id, "study_label": Schema.String.annotate({ "title": "Study Label" }), "title": Schema.String.annotate({ "title": "Title" }), "year": Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Year" }) }).annotate({ "title": "AppraisableReport", "identifier": "AppraisableReport" })
 export type DomainView = { readonly "id": string, readonly "judgement": Judgement | null, readonly "override": Override | null, readonly "proposed": Judgement | null, readonly "questions": ReadonlyArray<QuestionView>, readonly "title": string }
@@ -653,10 +659,10 @@ export type Progress = { readonly "full_texts": number, readonly "identification
 export const Progress = Schema.Struct({ "full_texts": Schema.Number.annotate({ "title": "Full Texts" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "identification": Schema.Union([PrismaCounts, Schema.Null]), "identity_revision_id": Schema.Union([Id, Schema.Null]), "searches": Schema.Number.annotate({ "title": "Searches" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "stages": Schema.Array(StageProgress).annotate({ "title": "Stages" }) }).annotate({ "title": "Progress", "identifier": "Progress" })
 export type ProtocolVersion = { readonly "content_hash": Sha256, readonly "protocol": ReviewProtocol }
 export const ProtocolVersion = Schema.Struct({ "content_hash": Sha256, "protocol": ReviewProtocol }).annotate({ "title": "ProtocolVersion", "identifier": "ProtocolVersion" })
-export type StoredProtocol = { readonly "approved_by"?: Id | null, readonly "approved_event_id"?: Id | null, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "project_id": Id, readonly "publish_reason"?: string | null, readonly "published_at"?: string | null, readonly "status": "draft" | "published", readonly "version": ProtocolVersion }
-export const StoredProtocol = Schema.Struct({ "approved_by": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "approved_event_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "project_id": Id, "publish_reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Publish Reason" })), "published_at": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" })), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version": ProtocolVersion }).annotate({ "title": "StoredProtocol", "identifier": "StoredProtocol" })
-export type PublishedProtocol = { readonly "documentation": { readonly [x: string]: DocumentationLevel }, readonly "stored": StoredProtocol }
-export const PublishedProtocol = Schema.Struct({ "documentation": Schema.Record(Schema.String, DocumentationLevel).annotate({ "title": "Documentation" }), "stored": StoredProtocol }).annotate({ "title": "PublishedProtocol", "description": "The version every decision reads now.", "identifier": "PublishedProtocol" })
+export type StoredProtocol = { readonly "approved_by": Id, readonly "approved_event_id": Id, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "project_id": Id, readonly "publish_reason"?: string | null, readonly "published_at": string, readonly "version": ProtocolVersion }
+export const StoredProtocol = Schema.Struct({ "approved_by": Id, "approved_event_id": Id, "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "project_id": Id, "publish_reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Publish Reason" })), "published_at": Schema.String.annotate({ "title": "Published At", "format": "date-time" }), "version": ProtocolVersion }).annotate({ "title": "StoredProtocol", "description": "A published version, with its approval.", "identifier": "StoredProtocol" })
+export type PublishedProtocol = { readonly "documentation": { readonly [x: string]: DocumentationLevel }, readonly "next_label": string, readonly "stored": StoredProtocol }
+export const PublishedProtocol = Schema.Struct({ "documentation": Schema.Record(Schema.String, DocumentationLevel).annotate({ "title": "Documentation" }), "next_label": Schema.String.annotate({ "title": "Next Label" }), "stored": StoredProtocol }).annotate({ "title": "PublishedProtocol", "description": "The version every decision reads now.", "identifier": "PublishedProtocol" })
 // schemas
 export type GetAnchor200 = Anchor
 export const GetAnchor200 = Anchor
@@ -1054,26 +1060,40 @@ export type GetPublishedProtocol200 = PublishedProtocol
 export const GetPublishedProtocol200 = PublishedProtocol
 export type GetPublishedProtocol422 = HTTPValidationError
 export const GetPublishedProtocol422 = HTTPValidationError
+export type GetProtocolDraft200 = ProtocolDraft
+export const GetProtocolDraft200 = ProtocolDraft
+export type GetProtocolDraft422 = HTTPValidationError
+export const GetProtocolDraft422 = HTTPValidationError
+export type SaveProtocolDraftRequestJson = DraftSave
+export const SaveProtocolDraftRequestJson = DraftSave
+export type SaveProtocolDraft200 = ProtocolDraft
+export const SaveProtocolDraft200 = ProtocolDraft
+export type SaveProtocolDraft422 = HTTPValidationError
+export const SaveProtocolDraft422 = HTTPValidationError
+export type StartProtocolDraftRequestJson = DraftStart
+export const StartProtocolDraftRequestJson = DraftStart
+export type StartProtocolDraft200 = ProtocolDraft
+export const StartProtocolDraft200 = ProtocolDraft
+export type StartProtocolDraft422 = HTTPValidationError
+export const StartProtocolDraft422 = HTTPValidationError
+export type DiscardProtocolDraftParams = { readonly "revision": number }
+export const DiscardProtocolDraftParams = Schema.Struct({ "revision": Schema.Number.annotate({ "title": "Revision" }).check(Schema.isInt().annotate({ "expected": "an integer" })) })
+export type DiscardProtocolDraft422 = HTTPValidationError
+export const DiscardProtocolDraft422 = HTTPValidationError
+export type PublishProtocolDraftRequestJson = DraftPublish
+export const PublishProtocolDraftRequestJson = DraftPublish
+export type PublishProtocolDraft200 = StoredProtocol
+export const PublishProtocolDraft200 = StoredProtocol
+export type PublishProtocolDraft422 = HTTPValidationError
+export const PublishProtocolDraft422 = HTTPValidationError
 export type ListProtocolVersions200 = ReadonlyArray<ProtocolVersionSummary>
 export const ListProtocolVersions200 = Schema.Array(ProtocolVersionSummary).annotate({ "title": "Response Listprotocolversions" })
 export type ListProtocolVersions422 = HTTPValidationError
 export const ListProtocolVersions422 = HTTPValidationError
-export type SaveProtocolDraftRequestJson = { readonly [x: string]: Schema.Json }
-export const SaveProtocolDraftRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
-export type SaveProtocolDraft201 = StoredProtocol
-export const SaveProtocolDraft201 = StoredProtocol
-export type SaveProtocolDraft422 = HTTPValidationError
-export const SaveProtocolDraft422 = HTTPValidationError
 export type GetProtocolVersion200 = StoredProtocol
 export const GetProtocolVersion200 = StoredProtocol
 export type GetProtocolVersion422 = HTTPValidationError
 export const GetProtocolVersion422 = HTTPValidationError
-export type PublishProtocolVersionRequestJson = PublishRequest
-export const PublishProtocolVersionRequestJson = PublishRequest
-export type PublishProtocolVersion200 = StoredProtocol
-export const PublishProtocolVersion200 = StoredProtocol
-export type PublishProtocolVersion422 = HTTPValidationError
-export const PublishProtocolVersion422 = HTTPValidationError
 export type PreviewProtocolDiffRequestJson = { readonly [x: string]: Schema.Json }
 export const PreviewProtocolDiffRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
 export type PreviewProtocolDiff200 = DiffPreview
@@ -2153,6 +2173,55 @@ export const make = (
     }))
     ))
   ),
+    "getProtocolDraft": (projectId, options: Parameters<KittumApi["getProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-draft").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetProtocolDraft200),
+      "422": decodeError("GetProtocolDraft422", GetProtocolDraft422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "saveProtocolDraft": (projectId, options: Parameters<KittumApi["saveProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.put, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-draft").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(SaveProtocolDraft200),
+      "422": decodeError("SaveProtocolDraft422", SaveProtocolDraft422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "startProtocolDraft": (projectId, options: Parameters<KittumApi["startProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-draft").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(StartProtocolDraft200),
+      "422": decodeError("StartProtocolDraft422", StartProtocolDraft422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "discardProtocolDraft": (projectId, options: Parameters<KittumApi["discardProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.delete, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-draft").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "revision": options.params["revision"] as any }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "422": decodeError("DiscardProtocolDraft422", DiscardProtocolDraft422),
+      "204": () => Effect.void,
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "publishProtocolDraft": (projectId, options: Parameters<KittumApi["publishProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-draft/publish").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(PublishProtocolDraft200),
+      "422": decodeError("PublishProtocolDraft422", PublishProtocolDraft422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
     "listProtocolVersions": (projectId, options: Parameters<KittumApi["listProtocolVersions"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions").pipe(
     Effect.flatMap((request) => request.pipe(
       withResponse(options?.config)(HttpClientResponse.matchStatus({
@@ -2162,31 +2231,11 @@ export const make = (
     }))
     ))
   ),
-    "saveProtocolDraft": (projectId, options: Parameters<KittumApi["saveProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions").pipe(
-    Effect.flatMap((request) => request.pipe(
-      HttpClientRequest.bodyJsonUnsafe(options.payload),
-      withResponse(options.config)(HttpClientResponse.matchStatus({
-      "2xx": decodeSuccess(SaveProtocolDraft201),
-      "422": decodeError("SaveProtocolDraft422", SaveProtocolDraft422),
-      orElse: unexpectedStatus
-    }))
-    ))
-  ),
     "getProtocolVersion": (projectId, versionId, options: Parameters<KittumApi["getProtocolVersion"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, versionId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions/" + __encodePathParam(versionId) + "").pipe(
     Effect.flatMap((request) => request.pipe(
       withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetProtocolVersion200),
       "422": decodeError("GetProtocolVersion422", GetProtocolVersion422),
-      orElse: unexpectedStatus
-    }))
-    ))
-  ),
-    "publishProtocolVersion": (projectId, versionId, options: Parameters<KittumApi["publishProtocolVersion"]>[2]) => __makePathRequest(HttpClientRequest.post, [projectId, versionId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions/" + __encodePathParam(versionId) + "/publish").pipe(
-    Effect.flatMap((request) => request.pipe(
-      HttpClientRequest.bodyJsonUnsafe(options.payload),
-      withResponse(options.config)(HttpClientResponse.matchStatus({
-      "2xx": decodeSuccess(PublishProtocolVersion200),
-      "422": decodeError("PublishProtocolVersion422", PublishProtocolVersion422),
       orElse: unexpectedStatus
     }))
     ))
@@ -3203,6 +3252,43 @@ readonly "getPublishedProtocol": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetPublishedProtocol200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetPublishedProtocol422", GetPublishedProtocol422>>;
   }
   /**
+* The project's open draft; 404 when none is open.
+*/
+readonly "getProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetProtocolDraft200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolDraft422", GetProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetProtocolDraft200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolDraft422", GetProtocolDraft422>>;
+  }
+  /**
+* Save Protocol Draft
+*/
+readonly "saveProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
+  }
+  /**
+* Open the project's draft, or return the one already open, unchanged. Without a source
+* it starts from the published version; 422 if none is published.
+*/
+readonly "startProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof StartProtocolDraftRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<StartProtocolDraft200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"StartProtocolDraft422", StartProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof StartProtocolDraftRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<StartProtocolDraft200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"StartProtocolDraft422", StartProtocolDraft422>>;
+  }
+  /**
+* Discard Protocol Draft
+*/
+readonly "discardProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof DiscardProtocolDraftParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<void, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DiscardProtocolDraft422", DiscardProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof DiscardProtocolDraftParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<void, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DiscardProtocolDraft422", DiscardProtocolDraft422>>;
+  }
+  /**
+* Publish the draft with the lead's approval, under the label Kittum assigns, and delete it,
+* in one transaction. 422 if it does not compile.
+*/
+readonly "publishProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof PublishProtocolDraftRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<PublishProtocolDraft200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolDraft422", PublishProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof PublishProtocolDraftRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PublishProtocolDraft200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolDraft422", PublishProtocolDraft422>>;
+  }
+  /**
 * List Protocol Versions
 */
 readonly "listProtocolVersions": {
@@ -3210,25 +3296,11 @@ readonly "listProtocolVersions": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListProtocolVersions200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListProtocolVersions422", ListProtocolVersions422>>;
   }
   /**
-* Save Protocol Draft
-*/
-readonly "saveProtocolDraft": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft201, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft201, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
-  }
-  /**
 * Get Protocol Version
 */
 readonly "getProtocolVersion": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetProtocolVersion200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolVersion422", GetProtocolVersion422>>;
     <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolVersion422", GetProtocolVersion422>>;
-  }
-  /**
-* Publish Protocol Version
-*/
-readonly "publishProtocolVersion": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
   }
   /**
 * The changes publishing this source would make to the published version, without saving

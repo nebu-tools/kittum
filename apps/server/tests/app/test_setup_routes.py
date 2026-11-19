@@ -8,6 +8,7 @@ and full text; reviewers get none of it, and only the lead may add full-text sen
 show in that queue. Runs on a rolled-back connection, so no document outlives the test.
 """
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,7 @@ from kittum.models import ModelRegistry
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.documents.conftest import savepoint_db
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -80,14 +82,8 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
     # The first version has nothing before it.
     preview = ok(client.post(f"/api/projects/{pid}/protocol/diff", json=source))
     assert (preview["previous"], preview["diff"]) == (None, None)
-    draft = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    assert draft["version"]["content_hash"] == preview["content_hash"]
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead, "reason": "First version"},
-        )
-    )
+    first = publish_through_api(client, pid, source, lead, "First version")
+    assert first["version"]["content_hash"] == preview["content_hash"]
 
     # The next version starts from the published one, which reads back to the same hash, and
     # the preview names what the edit changes.
@@ -95,7 +91,7 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
     again = ok(client.post("/api/protocol/parse", json={"text": text}))["source"]
     assert (
         ok(client.post("/api/protocol/validate", json=again))["content_hash"]
-        == (draft["version"]["content_hash"])
+        == (first["version"]["content_hash"])
     )
     edited = ok(
         client.post(
@@ -104,10 +100,12 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
         )
     )["source"]
     preview = ok(client.post(f"/api/projects/{pid}/protocol/diff", json=edited))
-    assert preview["previous"]["id"] == draft["id"]
+    assert preview["previous"]["id"] == first["id"]
     assert preview["diff"]["changed_criteria"] == ["POP"]
+    assert preview["version_label"] == "0.4"  # the server labels the next version
     assert [c["path"] for c in preview["diff"]["changes"]] == [
-        "search_topics[TRIALS].criteria[POP].text.en"
+        "version_label",
+        "search_topics[TRIALS].criteria[POP].text.en",
     ]
     assert len(ok(client.get(f"/api/projects/{pid}/protocol-versions"))) == 1  # nothing saved
 
@@ -135,13 +133,14 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
     # A reviewer who names themselves is refused every write that is the lead's, and the server
     # writes nothing: not the person, the protocol version, the search, or the corpus.
     sam = people["Sam"]
-    draft_two = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=edited), 201)
+    draft_url = f"/api/projects/{pid}/protocol-draft"
+    draft = ok(client.post(draft_url, json={"source": json.dumps(edited)}))
     revision = {"revision_id": str(new_id()), "actor_id": sam}
     two = [str(new_id()), str(new_id())]
     stage = {"scope_id": "nrt-vs-control", "stage": "title_abstract"}
     for path, body in (
         ("members", {"display_name": "Mallory", "roles": ["lead"], "added_by": sam}),
-        (f"protocol-versions/{draft_two['id']}/publish", {"approved_by": sam}),
+        ("protocol-draft/publish", {"revision": draft["revision"], "approved_by": sam}),
         ("search/import", {"plan": plan, "data": "", "format": "ris", "actor_id": sam}),
         ("search/run", {"plan": plan | {"source": "pubmed"}, "actor_id": sam}),
         ("corpus/ingest", {"actor_id": sam}),
@@ -157,7 +156,8 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
     assert client.post(f"/api/projects/{pid}/search/run", json=run).status_code == 503
     after = ok(client.get(f"/api/projects/{pid}"))
     assert [m["display_name"] for m in after["members"]] == ["Morgan Lee", *roles]
-    assert after["protocol"]["content_hash"] == draft["version"]["content_hash"]
+    assert after["protocol"]["content_hash"] == first["version"]["content_hash"]
+    assert ok(client.get(draft_url)) == draft
     assert len(ok(client.get(f"/api/projects/{pid}/search/executions", headers=as_lead))) == 3
 
     # No upload queue before the corpus; then every report, and none for a reviewer.

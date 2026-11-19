@@ -21,7 +21,7 @@ import yaml
 from kittum.cli import main
 from kittum.ledger import SigningKey
 from kittum.models import ModelRegistry
-from kittum.protocol import compile, publish, save_draft
+from kittum.protocol import compile, publish
 from kittum.report import CORE_RENDERERS, RenderedFile, seal_bundle
 from tests.extraction.support import RECIPE_ID, recorded
 from tests.extraction.test_review import _accept, _fields, _run
@@ -43,8 +43,7 @@ def test_accepted_values_download_as_csv_and_json_and_verify_against_the_ledger(
     env: Env, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     source = yaml.safe_load((EXAMPLES / "nicotine-replacement.yaml").read_text())
-    draft = save_draft(env.tx, env.project_id, compile(source))
-    publish(env.tx, env.project_id, draft.id, env.requester, ledger=env.ledger)
+    publish(env.tx, env.project_id, compile(source), env.requester, ledger=env.ledger)
     recipe = ModelRegistry.load().get(RECIPE_ID)
     server = OverHttp(recorded("lesotho"), recipe, env.artifacts, reasoning="Table 1 first.")
     base = f"/api/projects/{env.project_id}"

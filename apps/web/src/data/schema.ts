@@ -96,6 +96,7 @@ export type ProtocolIssue = KittumApi.ProtocolIssue;
 export type ValidationReport = KittumApi.ValidationReport;
 export type DiffPreview = KittumApi.DiffPreview;
 export type StoredProtocol = KittumApi.StoredProtocol;
+export type ProtocolDraft = KittumApi.ProtocolDraft;
 export type ProtocolDiff = KittumApi.ProtocolDiff;
 
 // The protocol assistant: revisions a model or the lead wrote, and hit counts of a strategy.
@@ -233,6 +234,8 @@ export const ProtocolVersion = Schema.Struct({
   protocol: ReviewProtocol,
   content_hash: Sha256,
   published_at: Schema.NullOr(Schema.String),
+  /** The label Kittum publishes the next version under. */
+  next_label: Schema.String,
 });
 export type ProtocolVersion = typeof ProtocolVersion.Type;
 

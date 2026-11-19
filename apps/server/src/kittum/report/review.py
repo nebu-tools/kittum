@@ -520,8 +520,7 @@ def load_review(
 
 def _protocol(tx: Tx, project_id: Id, seq_of: Mapping[Id, int]) -> StoredProtocol | None:
     rows = tx.execute(
-        "select id, approved_event_id from protocol_version"
-        " where project_id = %s and status = 'published'",
+        "select id, approved_event_id from protocol_version where project_id = %s",
         (project_id,),
     ).fetchall()
     published = [

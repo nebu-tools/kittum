@@ -47,7 +47,6 @@ from kittum.protocol import (
     compile,
     latest_published,
     publish,
-    save_draft,
 )
 from kittum.screening import (
     NotAssigned,
@@ -290,12 +289,11 @@ def publish_protocol(
     ledger: Ledger,
     reason: str | None = None,
 ) -> StoredProtocol:
-    """Compile a protocol source (YAML text or a mapping), save it as a draft, and publish it
-    with the approver's recorded approval. Raises `kittum.protocol.ProtocolError` if it does not
-    compile."""
+    """Compile a protocol source (YAML text or a mapping) and publish it with the approver's
+    recorded approval, under the label Kittum assigns. Raises `kittum.protocol.ProtocolError` if
+    it does not compile."""
     data = yaml.safe_load(source) if isinstance(source, str) else source
-    draft = save_draft(tx, project_id, compile(data))
-    return publish(tx, project_id, draft.id, approved_by, ledger=ledger, reason=reason)
+    return publish(tx, project_id, compile(data), approved_by, ledger=ledger, reason=reason)
 
 
 def parse_source(text: str, what: str = "the file") -> Any:

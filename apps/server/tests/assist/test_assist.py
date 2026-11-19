@@ -67,6 +67,7 @@ from tests.assist.support import (
 )
 from tests.documents.conftest import savepoint_db
 from tests.models.streaming import StreamingServer, chunks
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from kittum.db import Database, Tx
@@ -475,7 +476,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
             f"{url}/revisions/{again['id']}/publish", json={"reason": "First version"}, headers=lead
         )
     )
-    assert stored["status"] == "published"
+    assert stored["approved_event_id"] is not None
     (published,) = events(PUBLISHED_EVENT)
     assert published["content_hash"] == again["content_hash"]
     assert {p["path"] for p in published["ai_parts"]} == shared | {PUBMED}
@@ -490,20 +491,15 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     retitled = {**again["document"], "title": {"en": "NRT for smoking cessation"}}
 
     def publish_plainly(source: dict[str, Any], reason: str) -> dict[str, Any]:
-        version = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-        approval = {"approved_by": lead["X-Kittum-Reviewer"], "reason": reason}
-        ok(
-            client.post(
-                f"/api/projects/{pid}/protocol-versions/{version['id']}/publish", json=approval
-            )
-        )
+        publish_through_api(client, pid, source, lead["X-Kittum-Reviewer"], reason)
         return events(PUBLISHED_EVENT)[-1]
 
     assert {p["path"] for p in publish_plainly(retitled, "Shorter title")["ai_parts"]} == (
         shared - {"title.en"}
     ) | {PUBMED}
     plainly = publish_plainly(reverted["document"], "The drafted protocol")
-    assert {p["path"] for p in plainly["ai_parts"]} == set(marks)
+    # All but the label, which Kittum assigns when it publishes.
+    assert {p["path"] for p in plainly["ai_parts"]} == set(marks) - {"version_label"}
 
     # A question improved: the model rewrites the comparators, which were in German only.
     tranexamic = save(tranexamic_source())
@@ -528,7 +524,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
         review = load_review(tx, pid)
     files = {f.path: f.data for f in render_files(review, "ai_disclosure")}
     disclosed = json.loads(files["ai_disclosure.json"])["protocol_assistant"]
-    assert {p["path"] for p in disclosed["ai_parts"]} == set(marks)
+    assert {p["path"] for p in disclosed["ai_parts"]} == set(marks) - {"version_label"}
     assert [
         (r["purpose"], r["outcome"], r["attempts"], r["rejected_attempts"])
         for r in disclosed["requests"]
@@ -591,14 +587,13 @@ PUBLISH_ALONE = """
 import json, sys
 from kittum.db import Database
 from kittum.ledger import PostgresLedger
-from kittum.protocol import ProtocolStateError, compile, publish, save_draft
+from kittum.protocol import ProtocolStateError, compile, publish
 {imports}
 url, project, lead, path = sys.argv[1:5]
 assert "kittum.app" not in sys.modules
 try:
     with Database(url).transaction() as tx:
-        draft = save_draft(tx, project, compile(json.loads(open(path).read())))
-        publish(tx, project, draft.id, lead, ledger=PostgresLedger())
+        publish(tx, project, compile(json.loads(open(path).read())), lead, ledger=PostgresLedger())
 except ProtocolStateError as e:
     print(e)
     sys.exit(3)

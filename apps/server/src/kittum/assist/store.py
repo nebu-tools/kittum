@@ -43,7 +43,6 @@ from kittum.protocol import (
     diff,
     protocol_warnings,
     publish,
-    save_draft,
 )
 
 if TYPE_CHECKING:
@@ -462,5 +461,5 @@ def publish_revision(
     """Publish a revision as the protocol in force, with the approver's approval. The publication
     names the fields a model wrote, as every publication does."""
     revision = get_revision(tx, project_id, revision_id)
-    draft = save_draft(tx, project_id, _compile(revision.document))
-    return publish(tx, project_id, draft.id, approved_by, ledger=ledger, reason=reason)
+    version = _compile(revision.document)
+    return publish(tx, project_id, version, approved_by, ledger=ledger, reason=reason)

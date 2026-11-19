@@ -27,6 +27,7 @@ from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.documents.conftest import savepoint_db
 from tests.extraction.support import schema
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -79,13 +80,7 @@ def test_only_the_lead_requests_runs_on_included_reports_and_screeners_see_them_
         people[name] = ok(client.post(f"/api/projects/{pid}/members", json=body), 201)["actor_id"]
     stranger = str(new_id())
     source = ok(client.post("/api/protocol/parse", json={"text": PROTOCOL.read_text()}))["source"]
-    draft = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, source, lead)
     plan = {"topic_id": "TRIALS", "source": "citation_search", "platform": "Lists", "strategy": "x"}
     body = {"plan": plan, "data": (DATA / "citation_search.ris").read_text(), "format": "ris"}
     ok(client.post(f"/api/projects/{pid}/search/import", json=body | {"actor_id": lead}))

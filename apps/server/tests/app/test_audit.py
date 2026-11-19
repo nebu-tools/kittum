@@ -13,6 +13,7 @@ still verifies offline and no new bundle can be sealed. Runs on a rolled-back co
 recorded judge and the Janus path in a worker on the same connection.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +36,7 @@ from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.documents.conftest import savepoint_db
 from tests.extraction.support import schema
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -215,13 +217,7 @@ def screened_review(
         body = {"display_name": name, "roles": [role], "added_by": lead}
         r.people[name] = ok(client.post(f"/api/projects/{pid}/members", json=body), 201)["actor_id"]
     source = ok(client.post("/api/protocol/parse", json={"text": PROTOCOL.read_text()}))["source"]
-    draft = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, source, lead)
     citations = (DATA / "citation_search.ris").read_text()
     # A hand search of a journal's issue finds the trial's article a second time.
     hand = citations[: citations.index("ER  -") + len("ER  -")] + "\n"
@@ -720,3 +716,31 @@ def test_a_tampered_decision_is_pinpointed_and_a_bundle_sealed_before_still_veri
     pg.execute("set local session_replication_role = origin")
     assert r.audit("milestones")  # 200, with the milestones that remain
     assert (opening, "seq", "seq_gap") in findings()
+
+
+def test_a_sealed_bundle_holds_nothing_of_the_open_draft(pg: Tx, tmp_path: Path) -> None:
+    """The draft's text is marked with a value the seal refuses to hold. A bundle sealed while
+    the draft is open holds none of it; once the text is published, the same seal refuses it."""
+    r = screened_review(pg, tmp_path)
+    base = f"/api/projects/{r.pid}"
+    lead = r.people["Morgan"]
+    marker = "draft-only-marker-5d1c"
+    r.ctx.settings = replace(r.ctx.settings, core_api_key=marker)
+    text = r.ok(r.client.get(f"{base}/protocol/source"))["text"]
+    drafted = text.replace("\n  en: Nicotine re", f"\n  en: {marker} Nicotine re", 1)
+    assert drafted != text
+    draft = r.ok(r.client.post(f"{base}/protocol-draft", json={"source": drafted}))
+    saved = r.ok(
+        r.client.put(
+            f"{base}/protocol-draft", json={"revision": draft["revision"], "source": drafted}
+        )
+    )
+
+    sealed = r.ok(r.client.post(f"{base}/reports/bundle", json={"actor_id": lead}))
+    assert main(["verify", sealed["path"]]) == 0
+
+    published = {"revision": saved["revision"], "approved_by": lead}
+    r.ok(r.client.post(f"{base}/protocol-draft/publish", json=published))
+    refused = r.client.post(f"{base}/reports/bundle", json={"actor_id": lead})
+    assert refused.status_code == 409, refused.text
+    assert "holds a configured private value" in refused.json()["detail"]

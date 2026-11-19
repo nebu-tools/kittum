@@ -235,7 +235,7 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
   await test.step("the lead fills in an empty form and sees what is missing at each field", async () => {
     await page.goto(`/p/${project.id}/protocol?as=${project.lead}`);
     await page.getByRole("button", { name: /Fill in the form/ }).click();
-    await expect(page.getByTestId("unsaved")).toHaveText("A new protocol, not saved yet");
+    await expect(page.getByTestId("unsaved")).toHaveText("A new protocol, not saved as a revision");
     await form
       .getByRole("textbox", { name: "Title", exact: true })
       .fill("Nicotine replacement therapy for smoking cessation");
@@ -294,7 +294,7 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await expect(query).toBeFocused();
     await expect(query).toHaveValue(MISTYPED);
     await expect(page.getByTestId("unsaved")).toHaveText(
-      "Your changes to revision 1, not saved yet",
+      "Your changes to revision 1, not saved as a revision",
     );
     // A new draft would replace the unsaved changes, so the history offers none until they are
     // saved or discarded.
@@ -360,7 +360,7 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await shoot(page, "11-yaml");
     await formTab.click();
     await expect(title).toHaveValue("Nicotine replacement therapy for smoking cessation in adults");
-    await expect(unsaved).toHaveText("Your changes to revision 2, not saved yet");
+    await expect(unsaved).toHaveText("Your changes to revision 2, not saved as a revision");
   });
 
   await test.step("YAML the form only partly understands still opens in it, and saving says what is missing", async () => {
@@ -405,7 +405,7 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await formTab.click();
     await expect(title).toHaveValue("Nicotine replacement therapy for quitting smoking");
     await expect(form.getByRole("textbox", { name: "Comparator 1" })).toHaveCount(0);
-    await expect(unsaved).toHaveText("Your changes to revision 2, not saved yet");
+    await expect(unsaved).toHaveText("Your changes to revision 2, not saved as a revision");
     await page.keyboard.press("Control+Enter");
     await expect(page.getByText("Revision 3 of 3")).toBeVisible();
     await expect(rail.first().getByTestId("author")).toContainText("Morgan Lee");

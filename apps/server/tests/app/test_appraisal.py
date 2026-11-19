@@ -31,6 +31,7 @@ from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.documents.conftest import savepoint_db
+from tests.protocol.support import publish_through_api
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -80,13 +81,7 @@ def test_a_rob2_appraisal_from_quotes_to_the_report(pg: Tx) -> None:
         body = {"display_name": name, "roles": [role], "added_by": lead}
         people[name] = ok(client.post(f"/api/projects/{pid}/members", json=body), 201)["actor_id"]
     source = ok(client.post("/api/protocol/parse", json={"text": PROTOCOL.read_text()}))["source"]
-    draft = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=source), 201)
-    ok(
-        client.post(
-            f"/api/projects/{pid}/protocol-versions/{draft['id']}/publish",
-            json={"approved_by": lead},
-        )
-    )
+    publish_through_api(client, pid, source, lead)
     plan = {"topic_id": "TRIALS", "source": "citation_search", "platform": "Lists", "strategy": "x"}
     body = {"plan": plan, "data": (DATA / "citation_search.ris").read_text(), "format": "ris"}
     ok(client.post(f"/api/projects/{pid}/search/import", json=body | {"actor_id": lead}))

@@ -71,8 +71,7 @@ class ProtocolExporter:
     def export(self, tx: Tx, project_id: Id, cutoff_seq: int, bundle: BundleWriter) -> None:
         events = {e["event_id"] for e in _events(tx, project_id, cutoff_seq)}
         rows = tx.execute(
-            "select * from protocol_version where project_id = %s and status = 'published'"
-            " order by published_at, id",
+            "select * from protocol_version where project_id = %s order by published_at, id",
             (project_id,),
         ).fetchall()
         _write(

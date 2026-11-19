@@ -19,9 +19,9 @@ from kittum.protocol import (
     ProtocolStore,
     compile,
     get_version,
+    next_label,
     protocol_hash,
     publish,
-    save_draft,
 )
 from kittum.protocol.testing import InMemoryProtocolStore
 from tests.protocol.support import example_source, example_text, seed_project
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 def _switch_to_m2() -> dict:
     source = example_source()
-    source["version_label"] = "0.4"
     topic = source["search_topics"][0]
     topic["mode"] = "M2"
     topic["mode_rationale"] = {"en": "The update search returned 6,000 records."}
@@ -43,16 +42,14 @@ def _switch_to_m2() -> dict:
 
 
 def _publish_flow(store: ProtocolStore, ledger: Ledger, tx: Tx, project: Id, approver: Id) -> None:
-    """The rules both stores follow: idempotent drafts, one publication, reasons for mode changes."""
+    """The rules both stores follow: labels Kittum assigns, no unchanged version, reasons for
+    mode changes."""
     v1 = compile(example_text())
-    draft = store.save_draft(tx, project, v1)
-    assert (draft.status, draft.parent_id, draft.version) == ("draft", None, v1)
-    assert store.save_draft(tx, project, v1).id == draft.id
     assert store.latest_published(tx, project) is None
 
-    published = store.publish(tx, project, draft.id, approver)
-    assert published.status == "published" and published.approved_by == approver
-    assert store.get_version(tx, project, draft.id) == published
+    published = store.publish(tx, project, v1, approver)
+    assert (published.parent_id, published.version, published.approved_by) == (None, v1, approver)
+    assert store.get_version(tx, project, published.id) == published
     assert store.latest_published(tx, project) == published
     (event,) = ledger.events(tx, project)
     assert event.event_id == published.approved_event_id
@@ -62,19 +59,24 @@ def _publish_flow(store: ProtocolStore, ledger: Ledger, tx: Tx, project: Id, app
         published.published_at,
     )
     assert event.payload["content_hash"] == v1.content_hash
-    assert event.payload["version_label"] == "0.3"
+    assert event.payload["version_label"] == "0.3"  # the first version keeps its own label
     assert event.payload["previous_version_id"] is None
 
-    with pytest.raises(ProtocolStateError, match="already published"):
-        store.publish(tx, project, draft.id, approver)
+    # The same protocol again, under its own label or another, is not a new version.
+    for label in ("0.3", "7"):
+        again = compile({**example_source(), "version_label": label})
+        with pytest.raises(ProtocolStateError, match=r"version 0\.3, the one in force, unchanged"):
+            store.publish(tx, project, again, approver)
 
-    v2 = store.save_draft(tx, project, compile(_switch_to_m2()))
-    assert v2.parent_id == published.id
+    to_m2 = compile({**_switch_to_m2(), "version_label": "0.3"})
     with pytest.raises(ProtocolStateError, match=r"needs a reason \(TRIALS M1→M2\)"):
-        store.publish(tx, project, v2.id, approver)
+        store.publish(tx, project, to_m2, approver)
     reason = "Validation pack approved; the update search is too large for two screeners."
-    v2 = store.publish(tx, project, v2.id, approver, reason=reason)
+    v2 = store.publish(tx, project, to_m2, approver, reason=reason)
+    assert (v2.parent_id, v2.version.protocol.version_label) == (published.id, "0.4")
+    assert v2.version == compile({**_switch_to_m2(), "version_label": "0.4"})
     second = ledger.events(tx, project)[-1]
+    assert second.payload["version_label"] == "0.4"
     assert second.payload["reason"] == reason
     assert second.payload["mode_changes"] == [{"topic_id": "TRIALS", "before": "M1", "after": "M2"}]
     assert second.payload["previous_version_id"] == str(published.id)
@@ -87,9 +89,16 @@ def _publish_flow(store: ProtocolStore, ledger: Ledger, tx: Tx, project: Id, app
 
 
 def test_in_memory_store_follows_the_publish_rules() -> None:
-    clock = FixedClock(datetime(2026, 10, 28, 9, 0, tzinfo=UTC))
-    ledger = InMemoryLedger(clock)
-    _publish_flow(InMemoryProtocolStore(ledger, clock), ledger, null_tx(), new_id(), new_id())
+    ledger = InMemoryLedger(FixedClock(datetime(2026, 10, 28, 9, 0, tzinfo=UTC)))
+    _publish_flow(InMemoryProtocolStore(ledger), ledger, null_tx(), new_id(), new_id())
+
+
+@pytest.mark.parametrize(
+    ("label", "after"),
+    [("0.3", "0.4"), ("1", "2"), ("1.9", "1.10"), ("v2-draft", "v3-draft"), ("final", "final.1")],
+)
+def test_the_next_label_counts_up_the_last_number(label: str, after: str) -> None:
+    assert next_label(label) == after
 
 
 @pytest.mark.postgres
@@ -114,22 +123,20 @@ def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
 @pytest.mark.postgres
 def test_published_versions_are_frozen(pg: Tx) -> None:
     project, approver, _ = seed_project(pg)
-    draft = save_draft(pg, project, compile(example_text()))
-    with pytest.raises(psycopg.errors.RaiseException, match="immutable"), pg.transaction():
-        pg.execute("update protocol_version set document = '{}'::jsonb where id = %s", (draft.id,))
-    publish(pg, project, draft.id, approver, ledger=PostgresLedger())
+    published = publish(pg, project, compile(example_text()), approver, ledger=PostgresLedger())
     for statement in (
+        "update protocol_version set document = '{}'::jsonb where id = %s",
         "update protocol_version set publish_reason = 'x' where id = %s",
         "delete from protocol_version where id = %s",
     ):
         with pytest.raises(psycopg.errors.RaiseException, match="frozen"), pg.transaction():
-            pg.execute(statement, (draft.id,))
+            pg.execute(statement, (published.id,))
 
 
 @pytest.mark.postgres
 def test_a_tampered_document_is_detected_on_read(pg: Tx) -> None:
-    project, _, _ = seed_project(pg)
-    draft = save_draft(pg, project, compile(example_text()))
+    project, approver, _ = seed_project(pg)
+    draft = publish(pg, project, compile(example_text()), approver, ledger=PostgresLedger())
     pg.execute("alter table protocol_version disable trigger protocol_version_frozen")
     pg.execute(
         "update protocol_version set document = jsonb_set(document, '{version_label}', '\"9\"')"
@@ -143,21 +150,18 @@ def test_a_tampered_document_is_detected_on_read(pg: Tx) -> None:
 @pytest.mark.postgres
 def test_only_a_human_can_approve(pg: Tx) -> None:
     project, _, system = seed_project(pg)
-    draft = save_draft(pg, project, compile(example_text()))
+    version = compile(example_text())
     with pytest.raises(ProtocolStateError, match="human actor"):
-        publish(pg, project, draft.id, system, ledger=PostgresLedger())
-    with pytest.raises(NotFoundError):
-        publish(pg, project, new_id(), system, ledger=PostgresLedger())
+        publish(pg, project, version, system, ledger=PostgresLedger())
+    with pytest.raises(ProtocolStateError, match="does not exist"):
+        publish(pg, project, version, new_id(), ledger=PostgresLedger())
 
 
 def test_returned_protocols_cannot_change_what_the_store_holds() -> None:
-    clock = FixedClock(datetime(2026, 10, 28, 9, 0, tzinfo=UTC))
-    store = InMemoryProtocolStore(InMemoryLedger(clock), clock)
+    store = InMemoryProtocolStore(InMemoryLedger(FixedClock(datetime(2026, 10, 28, tzinfo=UTC))))
     project = new_id()
     version = compile(example_text())
-    published = store.publish(
-        null_tx(), project, store.save_draft(null_tx(), project, version).id, new_id()
-    )
+    published = store.publish(null_tx(), project, version, new_id())
 
     with pytest.raises(TypeError, match="immutable"):
         published.version.protocol.criteria[0].text["en"] = "Children who smoke."
@@ -179,19 +183,17 @@ def test_returned_protocols_cannot_change_what_the_store_holds() -> None:
 
 @pytest.mark.postgres
 def test_concurrent_publications_cannot_skip_the_mode_change_reason(pg: Tx) -> None:
-    """B's draft keeps M1. Against the M2 version A is publishing, that is a mode change."""
+    """B's version keeps M1. Against the M2 version A is publishing, that is a mode change."""
     del pg  # skips without a database; the test needs its own committing connections
     url = os.environ["KITTUM_DATABASE_URL"]
     ledger = PostgresLedger()
     with psycopg.connect(url, row_factory=dict_row) as setup:
         project, approver, _ = seed_project(setup)
-        first = save_draft(setup, project, compile(example_text()))
-        publish(setup, project, first.id, approver, ledger=ledger)
-        to_m2 = save_draft(setup, project, compile(_switch_to_m2()))
-        back_to_m1 = example_source()
-        back_to_m1["version_label"] = "0.5"
-        still_m1 = save_draft(setup, project, compile(back_to_m1))
+        publish(setup, project, compile(example_text()), approver, ledger=ledger)
         setup.commit()
+    to_m2 = compile(_switch_to_m2())
+    still_m1 = example_source()
+    still_m1["title"] = {"en": "Nicotine replacement, retitled"}
 
     outcome: list[object] = []
     with (
@@ -199,11 +201,11 @@ def test_concurrent_publications_cannot_skip_the_mode_change_reason(pg: Tx) -> N
         psycopg.connect(url, row_factory=dict_row) as b,
         psycopg.connect(url, autocommit=True) as monitor,
     ):
-        publish(a, project, to_m2.id, approver, ledger=ledger, reason="Validation pack approved.")
+        publish(a, project, to_m2, approver, ledger=ledger, reason="Validation pack approved.")
 
         def publish_b() -> None:
             try:
-                outcome.append(publish(b, project, still_m1.id, approver, ledger=ledger))
+                outcome.append(publish(b, project, compile(still_m1), approver, ledger=ledger))
                 b.commit()
             except ProtocolStateError as e:
                 outcome.append(e)

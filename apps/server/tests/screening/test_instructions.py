@@ -11,7 +11,7 @@ import pytest
 
 from kittum.core import new_id
 from kittum.judge import instructions_hash, load_verdicts, rendered_prompt
-from kittum.protocol import JudgeInstructions, ProtocolError, compile, publish, save_draft
+from kittum.protocol import JudgeInstructions, ProtocolError, compile, publish
 from kittum.report import load_review, render_files, trace
 from kittum.screening import (
     AI_READ,
@@ -71,8 +71,8 @@ def publish_version(world: World, label: str, **topic: Any) -> StoredProtocol:
     source["version_label"] = label
     source["search_topics"][0].update(topic)
     with world.db.transaction() as tx:
-        draft = save_draft(tx, world.project_id, compile(source))
-        return publish(tx, world.project_id, draft.id, world.people.lead, ledger=world.ledger)
+        version = compile(source)
+        return publish(tx, world.project_id, version, world.people.lead, ledger=world.ledger)
 
 
 def ref(world: World, key: str) -> str:
@@ -400,6 +400,7 @@ def test_the_bench_runs_a_draft_on_known_includes_and_settled_records(database: 
         0
     ].reference_set.model_dump(mode="json")
     source["search_topics"][0]["judge"] = DECISIVE
+    source["version_label"] = "0.5"  # the label Kittum publishes it under, after 0.4
     draft = compile(source)
     with world.db.transaction() as tx:
         bench_id = world.screening.request_bench(
@@ -437,7 +438,7 @@ def test_the_bench_runs_a_draft_on_known_includes_and_settled_records(database: 
     # Published as it was tried, the draft re-judges the bench's records from the cache.
     world.protocol = publish_version(
         world,
-        "0.3",
+        "0.5",
         reference_set=source["search_topics"][0]["reference_set"],
         judge=DECISIVE,
     )
