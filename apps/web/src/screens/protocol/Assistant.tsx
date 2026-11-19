@@ -48,6 +48,7 @@ import {
   valueAt,
   comesAfter,
   nextLabel,
+  startDraft,
   withPreset,
 } from "./document.ts";
 import type { Preset } from "./document.ts";
@@ -300,7 +301,21 @@ export function Assistant({
       "Kittum could not restore the revision.",
     );
 
-  const edit = (doc: Doc) => setWorking({ doc, base: working ? working.base : current });
+  const inForce = protocol?.protocol.version_label ?? null;
+  // The first change starts a new draft from the revision shown. Unless that change is to the
+  // label, the draft takes the label after the version in force.
+  const edit = (doc: Doc) =>
+    setWorking(
+      working
+        ? { doc, base: working.base }
+        : {
+            doc:
+              current && doc.version_label !== docOf(current).version_label
+                ? doc
+                : startDraft(doc, inForce),
+            base: current,
+          },
+    );
 
   const save = async () => {
     if (!working || saving) return;
@@ -377,12 +392,8 @@ export function Assistant({
         workbench.parseProtocol(await run(workbench.protocolSource(project.id))),
       );
       const read = parsed.source ? toDoc(parsed.source) : null;
-      // The new version starts with the next version label, so it never repeats the one in force.
       if (read && "doc" in read)
-        setWorking({
-          doc: { ...read.doc, version_label: nextLabel(read.doc.version_label) },
-          base: null,
-        });
+        setWorking({ doc: startDraft(read.doc, inForce ?? read.doc.version_label), base: null });
       else setError(read?.problem ?? "Kittum could not read the published version.");
     } catch (e) {
       setError(failure(e, "Kittum could not load the published version."));
@@ -523,7 +534,7 @@ export function Assistant({
                 <Provenance revision={current} revisions={revisions} people={people} />
                 <Publish
                   versionLabel={docOf(current).version_label}
-                  inForce={protocol?.protocol.version_label ?? null}
+                  inForce={inForce}
                   onRelabel={(label) =>
                     act(
                       async () =>

@@ -35,20 +35,12 @@ def live_source(
     gateway: Gateway,
     artifacts: ArtifactStore,
     *,
-    contact_email: str | None = None,
-    ncbi_api_key: str | None = None,
     clock: Clock | None = None,
 ) -> Source | None:
     """The live source a plan's `source` names, or None when Kittum can only import its exports."""
     match _ALIASES.get(name.strip().lower()):
         case "pubmed":
-            return PubMedSource(
-                gateway,
-                artifacts,
-                contact_email=contact_email,
-                ncbi_api_key=ncbi_api_key,
-                clock=clock,
-            )
+            return PubMedSource(gateway, artifacts, clock=clock)
         case "europepmc":
             return EuropePmcSource(gateway, artifacts, clock=clock)
         case "ctgov":

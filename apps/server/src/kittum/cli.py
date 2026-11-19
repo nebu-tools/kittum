@@ -188,8 +188,6 @@ def _project_step(args: argparse.Namespace) -> int:
                     args.source,
                     ctx.gateway,
                     ctx.artifacts,
-                    contact_email=ctx.settings.contact_email,
-                    ncbi_api_key=ctx.settings.ncbi_api_key,
                     clock=ctx.clock,
                 )
                 assert source is not None  # argparse allows only the live sources
@@ -409,6 +407,16 @@ def main(argv: list[str] | None = None) -> int:
         help="the sender's Ed25519 public key (PEM); without it the bundle's own key is used",
     )
     args = parser.parse_args(argv)
+    if args.command not in {"openapi", "verify"}:
+        from kittum.app import ConfigurationError, check_secrets
+        from kittum.settings import Settings
+
+        try:
+            # Before anything starts: a key or password Kittum cannot tell from ordinary content.
+            check_secrets(Settings.from_env())
+        except ConfigurationError as e:
+            print(f"kittum {args.command}: {e}", file=sys.stderr)
+            return 2
 
     if args.command == "verify":
         return _verify(args.bundle, args.public_key)

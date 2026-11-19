@@ -83,6 +83,7 @@ from kittum.report.prisma import (
     flow,
     flows,
 )
+from kittum.report.prisma import svg as prisma_svg
 from kittum.report.renderers import (
     CORE_RENDERERS,
     RenderedFile,
@@ -128,6 +129,7 @@ from kittum.report.working import (
 from kittum.screening import sees_lead_data
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
 
     from kittum.core import Clock
@@ -382,11 +384,13 @@ def seal_bundle(
     rights: RightsProfile | None = None,
     ledger: Ledger | None = None,
     clock: Clock | None = None,
+    private: Iterable[str] = (),
 ) -> Bundle:
     """Seal the handover bundle at the cutoff (default: the ledger head) with every report.
 
     The reports render from the same cutoff as the tables, so every count in `reports/` can be
-    recomputed from `kittum.sqlite`.
+    recomputed from `kittum.sqlite`. A file that holds one of `private`, the deployment's private
+    values, refuses the seal (`kittum.ledger.SealRefused`).
     """
     clock = clock or SystemClock()
     ledger = ledger or PostgresLedger(clock)
@@ -408,6 +412,7 @@ def seal_bundle(
         ledger=ledger,
         exporters=exporters,
         clock=clock,
+        private=private,
     )
 
 
@@ -487,6 +492,7 @@ __all__ = [
     "milestones",
     "one_line",
     "preview_decision_import",
+    "prisma_svg",
     "prompt_cards",
     "read_request",
     "record_render",

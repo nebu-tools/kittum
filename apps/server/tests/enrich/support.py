@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from kittum.core import sha256_hex
 from kittum.enrich import EnrichmentConfig
+from kittum.gateway import Credentials
 from kittum.gateway.testing import FakeTransport, PassThroughGateway
 from kittum.search import SourceRecord
 
@@ -18,7 +19,9 @@ if TYPE_CHECKING:
     from kittum.gateway import HttpRequest, HttpResponse
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CONTACT_EMAIL = "test@kittum.dev"
+CONTACT_EMAIL = "librarian@example.org"
+CREDENTIALS = Credentials.of(contact_email=CONTACT_EMAIL)
+"""What the gateway places in the requests: the contact address, so Unpaywall is asked too."""
 RETRACTION_ORIGINAL = "10.1016/S0140-6736(97)11096-0"
 RETRACTION_NOTICE = "10.1016/S0140-6736(10)60175-4"
 DERIVED_RELATION_FIXTURE = "crossref_is_retracted_by.json"
@@ -106,7 +109,7 @@ def non_oa_records() -> tuple[SourceRecord, ...]:
 
 
 def config() -> EnrichmentConfig:
-    return EnrichmentConfig(contact_email=CONTACT_EMAIL)
+    return EnrichmentConfig()
 
 
 class _StrictFakeTransport(FakeTransport):
@@ -126,4 +129,4 @@ def replay_gateway() -> tuple[PassThroughGateway, FakeTransport]:
     manifest = json.loads((FIXTURES / "manifest.json").read_text())
     responses = {url: (FIXTURES / filename).read_bytes() for url, filename in manifest.items()}
     transport = _StrictFakeTransport(responses)
-    return PassThroughGateway(transport), transport
+    return PassThroughGateway(transport, CREDENTIALS), transport

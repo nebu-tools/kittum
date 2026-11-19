@@ -10,7 +10,7 @@ services:
     image: postgres:18
     environment:
       POSTGRES_USER: kittum
-      POSTGRES_PASSWORD: kittum
+      POSTGRES_PASSWORD: kittum-local-dev
       POSTGRES_DB: kittum
     ports:
       - "127.0.0.1:${KITTUM_PG_PORT:-55432}:5432"
@@ -29,7 +29,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://kittum:kittum@postgres:5432/kittum?sslmode=disable
+      DATABASE_URL: postgres://kittum:kittum-local-dev@postgres:5432/kittum?sslmode=disable
       DBMATE_MIGRATIONS_DIR: /db/migrations
       DBMATE_SCHEMA_FILE: /db/schema.sql
       DBMATE_NO_DUMP_SCHEMA: "true"

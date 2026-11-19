@@ -103,6 +103,8 @@ create table gateway_attempt (
     status integer check (status between 100 and 599),
     duration_ms integer not null check (duration_ms >= 0),
     error text,
+    -- Each redirect followed, the hop's URL as built, without private values.
+    redirects text[] not null,
     recorded_at timestamptz not null
 );
 

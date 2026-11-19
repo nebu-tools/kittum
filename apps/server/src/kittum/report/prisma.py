@@ -83,9 +83,16 @@ class PrismaFlow(Record):
     records_unresolved: int  # screened, but in conflict at title and abstract
     ai_title_abstract: AiInvolvement
     reports_sought: int
+    """Records included at title and abstract. Records excluded there are not sought."""
     reports_not_retrieved: int
+    """Reports sought with no full text attached at this ledger event."""
+    reports_not_retrieved_registry: int
+    """Of those, trial registry records (`registry_records`): there is no article to retrieve."""
     reports_assessed: int
-    reports_awaiting_assessment: int  # retrieved, not yet decided by every screener
+    """Reports with a full text attached that every full-text screener has decided."""
+    reports_awaiting_assessment: int
+    """Reports with a full text attached and no full-text decision yet, whether or not the
+    full-text stage is open."""
     reports_excluded: int
     exclusion_reasons: tuple[ReasonCount, ...]
     reports_awaiting_classification: int  # insufficient information at full text
@@ -130,6 +137,41 @@ def _as_id(ref: str) -> UUID | None:
 
 def _records(stage: StageResult | None) -> list[ItemResult]:
     return list(stage.records) if stage else []
+
+
+REGISTRY_ID = re.compile(
+    r"^(NCT\d{8}|ISRCTN\d+|DRKS\d+|ACTRN\d+|ChiCTR[\w-]+|CTRI/[\d/]+|jRCT\w+|IRCT\w+|KCT\d+"
+    r"|PACTR\d+|TCTR\d+|UMIN\d+|NTR\d+|EUCTR[\w-]+|\d{4}-\d{6}-\d{2}(?:-\d{2})?)$",
+    re.IGNORECASE,
+)
+"""Trial registry IDs Kittum knows, as the workbench's `registryUrl` knows them."""
+REGISTRY_JOURNAL = re.compile(
+    r"clinicaltrials\.gov|isrctn|trial regist|clinical trials regist", re.IGNORECASE
+)
+
+
+def registry_records(review: Review) -> set[str]:
+    """The reports that are trial registry entries, not articles: no occurrence has a DOI, and
+    one has a registry ID Kittum knows or names a registry where the journal would be. This is
+    the workbench's `isRegistryOnly`, so Retrieval, Progress, and the PRISMA flow count the same
+    reports: there is no article to retrieve until the trial's results are published."""
+    if review.identity is None:
+        return set()
+    by_occurrence = review.records_by_occurrence()
+    with_doi: set[str] = set()
+    registry: set[str] = set()
+    for link in review.identity.links:
+        found = by_occurrence.get(link.occurrence_id)
+        if found is None:
+            continue
+        record, report = found[1], str(link.report_id)
+        if record.doi:
+            with_doi.add(report)
+        if any(REGISTRY_ID.match(i.strip()) for i in record.registry_ids) or (
+            REGISTRY_JOURNAL.search(record.journal or "")
+        ):
+            registry.add(report)
+    return registry - with_doi
 
 
 def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
@@ -186,12 +228,23 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
     excluded = [i for i in screened if i.outcome == "exclude"]
     sought = [i for i in screened if i.outcome == "include"]
     unresolved = [i for i in screened if i.outcome in ("pending", "conflict")]
+    # Retrieval: a sought report is retrieved when a full text is attached to it at this ledger
+    # event, and only then. Opening or closing the full-text stage changes no retrieval count.
     sought_refs = {i.item_ref for i in sought}
-    retrieved = [i for i in _records(ft) if i.item_ref in sought_refs]
-    not_sought = sorted(i.item_ref for i in _records(ft) if i.item_ref not in sought_refs)
-    not_retrieved = sorted(sought_refs - {i.item_ref for i in retrieved})
-    assessed = [i for i in retrieved if i.screened]
-    awaiting_assessment = [i for i in retrieved if not i.screened]
+    attached = review.attached_full_texts
+    retrieved = sorted(sought_refs & attached)
+    not_retrieved = sorted(sought_refs - attached)
+    not_retrieved_registry = sorted(set(not_retrieved) & registry_records(review))
+    full_text = {i.item_ref: i for i in _records(ft)}
+    not_sought = sorted(r for r in full_text if r not in sought_refs)
+    assessed = [full_text[r] for r in retrieved if r in full_text and full_text[r].screened]
+    assessed_refs = {i.item_ref for i in assessed}
+    awaiting_assessment = [r for r in retrieved if r not in assessed_refs]
+    # A report decided at full text whose full text was detached by this event is not retrieved,
+    # and not assessed; the check below names it.
+    decided_unattached = sorted(
+        r for r, i in full_text.items() if i.screened and r in sought_refs and r not in attached
+    )
     ft_excluded = [i for i in assessed if i.outcome == "exclude"]
     awaiting_classification = [i for i in assessed if i.outcome == "insufficient_information"]
     ft_unresolved = [i for i in assessed if i.outcome in ("pending", "conflict")]
@@ -226,8 +279,10 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
         "records_unresolved": refs(unresolved),
         "reports_sought": refs(sought),
         "reports_not_retrieved": tuple(not_retrieved),
+        "reports_not_retrieved_registry": tuple(not_retrieved_registry),
         "reports_assessed": refs(assessed),
-        "reports_awaiting_assessment": refs(awaiting_assessment),
+        "reports_awaiting_assessment": tuple(awaiting_assessment),
+        "full_texts_decided_unattached": tuple(decided_unattached),
         "full_texts_not_sought": tuple(not_sought),
         "reports_excluded": refs(ft_excluded),
         "reports_awaiting_classification": refs(awaiting_classification),
@@ -266,6 +321,9 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
         ),
         check("every full text assessed was sought", 0, len(not_sought)),
         check(
+            "every report decided at full text has a full text attached", 0, len(decided_unattached)
+        ),
+        check(
             "assessed equals excluded plus included plus awaiting plus unresolved",
             len(assessed),
             len(ft_excluded) + len(included) + len(awaiting_classification) + len(ft_unresolved),
@@ -300,6 +358,7 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
         ai_title_abstract=ai_ta,
         reports_sought=len(sought),
         reports_not_retrieved=len(not_retrieved),
+        reports_not_retrieved_registry=len(not_retrieved_registry),
         reports_assessed=len(assessed),
         reports_awaiting_assessment=len(awaiting_assessment),
         reports_excluded=len(ft_excluded),
@@ -380,31 +439,26 @@ def _arrow(x1: int, y1: int, x2: int, y2: int) -> str:
     )
 
 
-def retrieval_note(articles: int, registry: int) -> str:
-    """What "Reports not retrieved" means at this ledger event, with the open retrieval counted,
-    so a downloaded draft keeps its status: the words Retrieval and Progress use."""
-
-    def count(n: int, one: str, many: str) -> str:
-        return f"{n} {one if n == 1 else many}"
-
-    parts = [
-        *([count(articles, "article needs a PDF", "articles need a PDF")] if articles else []),
-        *(
-            [
-                count(
-                    registry,
-                    "registry record has no article yet",
-                    "registry records have no article yet",
-                )
-            ]
-            if registry
-            else []
-        ),
+def retrieval_lines(f: PrismaFlow) -> list[tuple[str, int]]:
+    """The "Reports not retrieved" box's sub-lines, when registry records are among them."""
+    if not f.reports_not_retrieved_registry:
+        return []
+    articles = f.reports_not_retrieved - f.reports_not_retrieved_registry
+    given = [
+        ("Article, no full text attached", articles),
+        ("Registry record, no article yet", f.reports_not_retrieved_registry),
     ]
-    return (
-        "Reports not retrieved: reports sought that had no full text in Kittum at this ledger"
-        f" event. Retrieval was still open: {' and '.join(parts)}."
-    )
+    return [(label, n) for label, n in given if n]
+
+
+RETRIEVAL_NOTE = (
+    "Reports sought for retrieval: records included at title and abstract. Reports not"
+    " retrieved: reports sought with no full text attached at this ledger event. Reports assessed"
+    " for eligibility: reports with a full text attached that every full-text screener has"
+    " decided; the rest with a full text attached are not yet assessed, whether or not full-text"
+    " screening is open."
+)
+"""What the retrieval boxes count, under every diagram."""
 
 
 AI_LINE = "With AI involvement*"
@@ -426,17 +480,13 @@ def svg(
     reasons: Mapping[str, str] | None = None,
     notes: Sequence[str] = (),
     warning: str | None = None,
-    registry_not_retrieved: int = 0,
 ) -> str:
     """The flow as a standalone SVG: `title` in bold, then each `subtitle` line wrapped under it
     (the review question the flow answers), and `warning` in red under that (an unverified
     ledger). `reasons` names the exclusion reasons by criterion ID: a figure for publication
     shows a short name, never the ID, and `notes` under the diagram give the full wording and
-    define the AI line, so the exported file explains itself. `registry_not_retrieved` splits the
-    reports not retrieved into articles still without a full text and trial registry entries."""
+    define the AI line, so the exported file explains itself."""
     left, right = _BAND + 20, _BAND + 20 + _W + _GAP
-    # Of the reports not retrieved, the trial registry entries: no article exists yet.
-    registry = min(registry_not_retrieved, f.reports_not_retrieved)
 
     def sources(*kinds: str) -> list[str]:
         """The sources of a PRISMA 2020 category, each under it with its own count."""
@@ -494,14 +544,7 @@ def svg(
             [f"Reports sought for retrieval: n = {f.reports_sought}"],
             [
                 f"Reports not retrieved: n = {f.reports_not_retrieved}",
-                *(
-                    [
-                        f"  Article, PDF needed: n = {f.reports_not_retrieved - registry}",
-                        f"  Registry record, no article yet: n = {registry}",
-                    ]
-                    if registry
-                    else []
-                ),
+                *(f"  {label}: n = {n}" for label, n in retrieval_lines(f)),
             ],
         ),
         (

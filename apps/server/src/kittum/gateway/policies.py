@@ -4,6 +4,7 @@ Configuration overrides any of these by passing a full mapping to
 `kittum.gateway.SourceGateway`, for example `{**default_policies(), "pubmed": my_policy}`.
 """
 
+from kittum.gateway.credentials import NO_CREDENTIALS, Credentials
 from kittum.gateway.types import SourcePolicy
 
 MARGIN = 0.9
@@ -18,17 +19,16 @@ def _budget(limit: int) -> int:
     return int(limit * MARGIN)
 
 
-def default_policies(
-    *, contact_email: str | None = None, ncbi_api_key: str | None = None
-) -> dict[str, SourcePolicy]:
+def default_policies(credentials: Credentials = NO_CREDENTIALS) -> dict[str, SourcePolicy]:
     """The free-source policies from docs/sources.md, narrowed by `MARGIN`.
 
-    A configured contact email or NCBI key unlocks Crossref's polite pool and PubMed's higher
+    A configured contact address or NCBI key unlocks Crossref's polite pool and PubMed's higher
     rate. Concurrency caps are Kittum's choice where a source publishes none.
     """
-
+    ncbi_api_key = "ncbi_api_key" in credentials.values
     pubmed_rate = 10 if ncbi_api_key else 3
-    crossref_rate, crossref_concurrency = (10, 3) if contact_email else (5, 1)
+    contact = "contact_email" in credentials.values
+    crossref_rate, crossref_concurrency = (10, 3) if contact else (5, 1)
     return {
         "pubmed": SourcePolicy(
             source="pubmed",

@@ -6,12 +6,13 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote_plus
 
 import pytest
 
 from kittum.cli import main
 from kittum.core import Id, new_id, sha256_hex
-from kittum.ledger import BundleWriter, SigningKey, seal
+from kittum.ledger import BundleWriter, SealRefused, SigningKey, seal
 from kittum.ledger.bundle import MANIFEST_DOMAIN
 from kittum.ledger.keys import document_message
 from kittum.storage import FilesystemStore
@@ -240,3 +241,60 @@ def test_tampered_bundle_fails_offline_verification(
     printed = capsys.readouterr().out
     assert expected in printed
     assert "FAILED" in printed
+
+
+ADDRESS = "librarian@example.org"
+
+
+@dataclass
+class PlantingExporter:
+    """Writes the contact address into one file of the bundle, as a bug elsewhere might."""
+
+    where: str
+    pdf: str = ""
+    name: str = "planted"
+
+    def export(self, tx: Tx, project_id: Id, cutoff_seq: int, bundle: BundleWriter) -> None:  # noqa: ARG002
+        if self.where == "report":
+            bundle.file("reports/sources.md", f"# Sources\n\nAsked as {ADDRESS}.\n".encode())
+        elif self.where == "table":
+            bundle.table("source_request", ["url"])
+            bundle.insert(
+                "source_request", [{"url": f"https://x.example.org/?email={quote_plus(ADDRESS)}"}]
+            )
+        else:
+            bundle.artifact(self.pdf, media_type="application/pdf")
+
+
+@pytest.mark.parametrize(
+    ("where", "named"),
+    [("report", "reports/sources.md"), ("table", "kittum.sqlite"), ("artifact", None)],
+)
+def test_a_bundle_with_a_private_value_in_any_file_is_not_sealed(
+    store: Harness, tmp_path: Path, where: str, named: str | None
+) -> None:
+    project, actor = store.new_project()
+    store.append(project, actor, 2)
+    artifacts = FilesystemStore(tmp_path / "store")
+    pdf = artifacts.put(b"%PDF-1.7\n% sent by " + ADDRESS.encode() + b"\n")
+    out = tmp_path / "bundle"
+
+    with pytest.raises(SealRefused) as refused:
+        seal(
+            store.tx,
+            project,
+            2,
+            artifacts,
+            out,
+            signer=KEY,
+            actor_id=actor,
+            ledger=store.ledger,
+            exporters=[PlantingExporter(where, pdf)],
+            clock=store.clock,
+            private=(ADDRESS, "some-api-key"),
+        )
+
+    assert refused.value.file == (named or f"artifacts/{pdf}")
+    assert refused.value.file in str(refused.value)
+    assert not out.exists()
+    assert [e.type for e in store.ledger.events(store.tx, project)] == ["test.event"] * 2

@@ -3,7 +3,13 @@
 import json
 from typing import TYPE_CHECKING
 
-from kittum.gateway import Gateway, HttpRequest, SourceBudgetExhausted, source_message
+from kittum.gateway import (
+    Gateway,
+    HttpRequest,
+    SourceBudgetExhausted,
+    SourceNotConfigured,
+    source_message,
+)
 from kittum.gateway import SourceUnavailable as GatewayUnavailable
 
 if TYPE_CHECKING:
@@ -14,7 +20,9 @@ class SourceUnavailable(Exception):
     """A source did not answer. The "first healthy source" policy moves to the next one.
 
     `status` is the last HTTP status, when the source answered at all; `message` is what the
-    source said about the failure in its own words, when it said anything."""
+    source said about the failure in its own words, when it said anything. The gateway scrubbed
+    what both come from, and the URL is the request as the adapter built it, so none of them
+    holds the contact address or a key."""
 
     def __init__(
         self,
@@ -44,11 +52,14 @@ def unavailable(source: str, error: Exception) -> SourceUnavailable:
             source,
             f"HTTP {error.status} after {error.attempts} attempts",
             status=error.status,
-            message=source_message(error.body),
+            message=error.message,
         )
     if isinstance(error, SourceBudgetExhausted):
         return SourceUnavailable(source, str(error), kind="budget")
-    return SourceUnavailable(source, f"{type(error).__name__}: {error}", kind="unreachable")
+    if isinstance(error, SourceNotConfigured):
+        return SourceUnavailable(source, str(error), kind="unreachable")
+    # Not the gateway's: only its kind, as its text may quote the request.
+    return SourceUnavailable(source, type(error).__name__, kind="unreachable")
 
 
 def fetch(

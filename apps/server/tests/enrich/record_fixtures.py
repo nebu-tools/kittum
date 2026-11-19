@@ -11,8 +11,6 @@ records everything again).
 
 import json
 import os
-import urllib.error
-import urllib.request
 import uuid
 from typing import TYPE_CHECKING
 
@@ -20,10 +18,17 @@ import psycopg
 
 from kittum.core import sha256_hex
 from kittum.enrich import EnrichmentConfig, crossref, enrich
-from kittum.gateway import HttpRequest, HttpResponse
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    HttpResponse,
+    HttpxTransport,
+    recording_key,
+    unreached,
+)
 from kittum.gateway.testing import PassThroughGateway
 from tests.enrich.support import (
-    CONTACT_EMAIL,
+    CREDENTIALS,
     DERIVED_RELATION_FIXTURE,
     FIXTURES,
     RETRACTION_NOTICE,
@@ -43,10 +48,15 @@ if TYPE_CHECKING:
 
 
 class RecordingTransport:
-    """Sends real requests and keeps each response under the URL that produced it."""
+    """Sends real requests and keeps each response, scrubbed of `credentials`, under the
+    request's public key."""
 
-    def __init__(self, directory: Path, *, again: bool = False) -> None:
+    def __init__(
+        self, directory: Path, credentials: Credentials = CREDENTIALS, *, again: bool = False
+    ) -> None:
         self._directory = directory
+        self._credentials = credentials
+        self._inner = HttpxTransport()
         self._manifest: dict[str, str] = {}
         manifest = directory / "manifest.json"
         self._have: dict[str, str] = (
@@ -54,26 +64,16 @@ class RecordingTransport:
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:
-        if request.url in self._have:
-            body = (self._directory / self._have[request.url]).read_bytes()
-            self._manifest[request.url] = self._have[request.url]
+        key = recording_key(request, self._credentials)
+        if key in self._have:
+            body = (self._directory / self._have[key]).read_bytes()
+            self._manifest[key] = self._have[key]
             return HttpResponse(status=200, headers=(), body=body, body_hash=sha256_hex(body))
-        http_request = urllib.request.Request(
-            request.url, method=request.method, headers=dict(request.headers)
-        )
-        try:
-            with urllib.request.urlopen(http_request, timeout=60) as response:
-                status = response.status
-                body = response.read()
-                headers = tuple(response.headers.items())
-        except urllib.error.HTTPError as error:
-            status = error.code
-            body = error.read()
-            headers = ()
-        filename = f"{sha256_hex(request.url.encode())[:16]}.json"
-        (self._directory / filename).write_bytes(body)
-        self._manifest[request.url] = filename
-        return HttpResponse(status=status, headers=headers, body=body, body_hash=sha256_hex(body))
+        response = self._credentials.scrub(self._inner.send(request))
+        filename = f"{sha256_hex(key.encode())[:16]}.json"
+        (self._directory / filename).write_bytes(response.body)
+        self._manifest[key] = filename
+        return response
 
     def write_manifest(self) -> None:
         manifest = self._directory / "manifest.json"
@@ -91,8 +91,11 @@ class DownSources:
 
     def fetch(self, source: str, request: HttpRequest) -> HttpResponse:
         if source in self._sources:
-            raise TimeoutError(f"{source} is out of budget")
+            raise unreached(source, TimeoutError(f"{source} is out of budget"))
         return self._inner.fetch(source, request)
+
+    def configured(self, source: str) -> bool:
+        return self._inner.configured(source)
 
 
 def _run(
@@ -109,7 +112,7 @@ def main() -> None:
 
     url = os.environ["KITTUM_DATABASE_URL"]
     transport = RecordingTransport(FIXTURES, again="--all" in sys.argv)
-    gateway = PassThroughGateway(transport)
+    gateway = PassThroughGateway(transport, CREDENTIALS)
     openalex_down = DownSources(gateway, "openalex")
     metadata_down = DownSources(gateway, "openalex", "europepmc")
     with psycopg.connect(url) as connection, connection.transaction(force_rollback=True):
@@ -123,7 +126,7 @@ def main() -> None:
         _run(doi_only_records(), metadata_down, connection, config())
         _run(non_oa_records(), gateway, connection, config())
         for doi in (RETRACTION_ORIGINAL, RETRACTION_NOTICE):
-            crossref.work(gateway, doi, email=CONTACT_EMAIL)
+            crossref.work(gateway, doi)
     transport.write_manifest()
     _derive_relation_fixture(transport)
     print(f"recorded {len(transport._manifest)} responses in {FIXTURES}")
@@ -136,7 +139,7 @@ def _derive_relation_fixture(transport: RecordingTransport) -> None:
     `is-retracted-by` as a relation filter, but publishers can deposit relation kinds that the
     filter list does not cover. The rest of the document is the real recorded original.
     """
-    url = crossref._url(RETRACTION_ORIGINAL, CONTACT_EMAIL)
+    url = crossref._url(RETRACTION_ORIGINAL)
     body = json.loads((FIXTURES / transport._manifest[url]).read_bytes())
     message = body["message"]
     message["updated-by"] = []

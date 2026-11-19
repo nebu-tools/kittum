@@ -102,15 +102,9 @@ class FullTextCandidate(Record):
 
 
 class EnrichmentConfig(Record):
-    """What the source clients need. Entry points map `kittum.settings.Settings` onto this."""
+    """How the source clients batch. The contact address and the keys are the gateway's
+    (`kittum.gateway.PLACEMENTS`)."""
 
-    contact_email: str | None = None
-    openalex_api_key: str | None = None
-    semantic_scholar_api_key: str | None = None
-    """Semantic Scholar is asked only with a key: its licence asks for permission before
-    commercial use."""
-    core_api_key: str | None = None
-    """CORE answers only with a key; without one the waterfall skips it."""
     batch_size: int = 50
 
 
@@ -123,8 +117,8 @@ class WorkIds(Record):
 
 
 class FullTextLookup(Record):
-    """What one full-text source said about a work: the request that asked it, and the file
-    locations it named (none when it has no open copy)."""
+    """What one full-text source said about a work: the request that asked it, as the adapter
+    built it, and the file locations it named (none when it has no open copy)."""
 
     source: str
     url: str

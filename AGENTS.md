@@ -31,7 +31,7 @@ uv run pytest                          # Postgres tests skip without a database
 # Postgres for the `postgres` tests
 docker compose -f infra/compose.yaml up -d --wait postgres
 docker compose -f infra/compose.yaml run --rm migrate
-export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum
+export KITTUM_DATABASE_URL=postgresql://kittum:kittum-local-dev@127.0.0.1:55432/kittum
 
 # Workbench and contracts (from kittum/)
 pnpm install

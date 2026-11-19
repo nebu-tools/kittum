@@ -35,8 +35,8 @@ import re
 import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Protocol
-from urllib.parse import quote, quote_plus
 
+from kittum.core import PrivateValues
 from kittum.models.types import BackendError, Completion, CompletionRequest, request_key
 
 if TYPE_CHECKING:
@@ -171,15 +171,6 @@ class LlmRecordings:
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def _pattern(values: Iterable[str]) -> re.Pattern[bytes] | None:
-    """Matches any of `values`, plain or percent-encoded, in any case."""
-    spellings = {s for v in values for s in (v, quote(v, safe=""), quote_plus(v))}
-    if not spellings:
-        return None
-    ordered = sorted(spellings, key=len, reverse=True)
-    return re.compile(b"|".join(re.escape(s.encode()) for s in ordered), re.IGNORECASE)
-
-
 class RecordingBackend:
     """Answers as `inner` does and writes each completion to `recordings`, unless it holds one of
     the `sensitive` values, which it refuses to write (and to return)."""
@@ -197,13 +188,13 @@ class RecordingBackend:
         self.recipe = recipe
         self._recordings = recordings
         self._store = store
-        self._sensitive = _pattern(s for s in sensitive if s)
+        self._sensitive = PrivateValues(sensitive)
 
     def complete(self, request: CompletionRequest) -> Completion:
         completion = self._inner.complete(request)
         raw_request = self._stored(completion.raw_request_hash)
         raw_response = self._stored(completion.raw_response_hash)
-        if self._sensitive is not None:
+        if self._sensitive:
             for field, data in (
                 ("request", json.dumps(request.model_dump(mode="json"), ensure_ascii=False)),
                 ("completion", json.dumps(completion.model_dump(mode="json"), ensure_ascii=False)),
@@ -211,7 +202,7 @@ class RecordingBackend:
                 ("raw response", raw_response),
             ):
                 found = data.encode() if isinstance(data, str) else data
-                if found is not None and self._sensitive.search(found):
+                if found is not None and self._sensitive.holds(found):
                     raise LlmRecordingRefused(
                         f"{self.recipe.id}: not recording request {completion.request_hash}: its"
                         f" {field} holds a configured secret or the contact address"

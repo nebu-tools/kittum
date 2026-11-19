@@ -221,26 +221,18 @@ class PubMedSource:
         gateway: Gateway,
         artifacts: ArtifactStore,
         *,
-        contact_email: str | None = None,
-        ncbi_api_key: str | None = None,
         tool: str = "kittum",
         clock: Clock | None = None,
         max_count_per_window: int = DEFAULT_MAX_COUNT,
     ) -> None:
         self._gateway = gateway
         self._artifacts = artifacts
-        self._contact_email = contact_email
-        self._ncbi_api_key = ncbi_api_key
         self._tool = tool
         self._clock = clock or SystemClock()
         self._max_count_per_window = max_count_per_window
 
     def _url(self, endpoint: str, params: dict[str, str]) -> str:
-        params = {**params, "tool": self._tool}
-        if self._contact_email:
-            params["email"] = self._contact_email
-        if self._ncbi_api_key:
-            params["api_key"] = self._ncbi_api_key
+        params = {**params, "tool": self._tool}  # the gateway adds `email` and `api_key`
         return f"{EUTILS_BASE}/{endpoint}?{urlencode(params, quote_via=quote)}"
 
     def _fetch(self, url: str, raw_hashes: list[Sha256]) -> tuple[bytes, Sha256]:

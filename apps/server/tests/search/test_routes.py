@@ -1,8 +1,8 @@
 import os
 import uuid
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 import httpx2
 import psycopg
@@ -14,7 +14,13 @@ from kittum.api import AppContext, create_app
 from kittum.core import new_id, sha256_hex
 from kittum.db import Database
 from kittum.db.testing import null_tx
-from kittum.gateway import HttpRequest, HttpResponse, RecordedTransport, SourceGateway
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    HttpResponse,
+    RecordedTransport,
+    SourceGateway,
+)
 from kittum.gateway.testing import FakeTransport, PassThroughGateway
 from kittum.ledger.testing import InMemoryLedger
 from kittum.settings import Settings
@@ -306,7 +312,8 @@ class _Down:
         self.sent: list[str] = []
 
     def send(self, request: HttpRequest) -> HttpResponse:
-        self.sent.append(request.url)
+        wire = request.on_the_wire()
+        self.sent.append(f"{wire.url}?{urlencode(wire.params)}")
         if "rejected" in request.url:
             return HttpResponse(status=400, headers=(), body=b"", body_hash=sha256_hex(b""))
         if "eutils.ncbi.nlm.nih.gov" in request.url:
@@ -326,6 +333,7 @@ def test_a_source_the_network_cannot_reach_is_a_502_that_says_why_for_counts_and
     context.gateway = SourceGateway(
         database=context.db,
         transport=down,
+        credentials=Credentials.of(contact_email="lead@example.org", ncbi_api_key="ncbi-secret"),
         artifacts=context.artifacts,
         buckets="memory",
         cache="memory",
@@ -350,11 +358,8 @@ def test_a_source_the_network_cannot_reach_is_a_502_that_says_why_for_counts_and
                 )
                 assert (resp.status_code, resp.json()["detail"]) == (502, detail)
         assert len(down.sent) == 6
-        # A query PubMed rejects names the request it sent, without the contact address and the
-        # NCBI key the request carried.
-        context.settings = replace(
-            context.settings, contact_email="lead@example.org", ncbi_api_key="ncbi-secret"
-        )
+        # A query PubMed rejects names the request Kittum built, without the contact address and
+        # the NCBI key the gateway attached for the send.
         resp = client.post(
             f"/api/projects/{project_id}/search/run",
             json={"plan": {**PUBMED_PLAN, "strategy": "rejected"}, "actor_id": actor_id},
@@ -362,9 +367,11 @@ def test_a_source_the_network_cannot_reach_is_a_502_that_says_why_for_counts_and
         assert (
             "email=lead%40example.org" in down.sent[-1] and "api_key=ncbi-secret" in down.sent[-1]
         )
-        assert (resp.status_code, resp.json()["detail"]) == (
-            502,
-            "PubMed returned HTTP 400 for https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+        detail = resp.json()["detail"]
+        assert resp.status_code == 502
+        assert detail.startswith(
+            "PubMed returned HTTP 400 for https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"
         )
+        assert "lead" not in detail and "ncbi-secret" not in detail
         listed = client.get(f"/api/projects/{project_id}/search/executions", headers=lead)
         assert listed.json() == []

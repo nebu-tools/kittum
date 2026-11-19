@@ -19,12 +19,13 @@ BASE = "https://api.core.ac.uk/v3/search/works"
 NO_KEY = "no CORE key is set (KITTUM_CORE_API_KEY)"
 
 
-def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None) -> FullTextLookup | None:
+def find(gateway: Gateway, ids: WorkIds) -> FullTextLookup | None:
+    """The gateway adds the key (`kittum.gateway.PLACEMENTS`); without one CORE is not asked."""
     doi = canonical_doi(ids.doi)
-    if not doi or not api_key:
+    if not doi or not gateway.configured(SOURCE):
         return None
     url = f"{BASE}?{urlencode({'q': f'doi:"{doi}"', 'limit': '5'})}"
-    body = fetch_json(gateway, SOURCE, url, headers=(("Authorization", f"Bearer {api_key}"),))
+    body = fetch_json(gateway, SOURCE, url)
     if body is None:
         return FullTextLookup(source=SOURCE, url=url)
     if not isinstance(body, dict) or not isinstance(body.get("results"), list):

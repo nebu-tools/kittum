@@ -29,11 +29,11 @@ from kittum.app import (
     build_gateway,
     build_judge,
     create_project,
+    credentials,
     ingest_corpus,
     job_handlers,
     open_screening,
     publish_protocol,
-    recording_secrets,
     request_enrichment,
 )
 from kittum.app.demo import DATA, PROTOCOL, SCOPE, SENTINELS
@@ -54,7 +54,6 @@ from kittum.settings import LlmEndpoint, Settings
 from kittum.storage import FilesystemStore
 from tests.app.record_stack import STACK
 from tests.app.test_hosted_model import RECIPES
-from tests.enrich.support import CONTACT_EMAIL
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -72,7 +71,7 @@ _TIME = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d
 
 
 class LiveSources:
-    """The real sources, as recorded for the stack under the test address, asked with ours."""
+    """The real sources, as recorded for the stack, asked with our address and key attached."""
 
     def __init__(self) -> None:
         self._recorded = RecordedTransport(STACK)
@@ -80,8 +79,7 @@ class LiveSources:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         self.sent.append(request)
-        url = request.url.replace(quote_plus(PERSONAL), quote_plus(CONTACT_EMAIL))
-        return self._recorded.send(request.model_copy(update={"url": url}))
+        return self._recorded.send(request)
 
 
 class HostedJudge:
@@ -228,8 +226,10 @@ def test_a_recorded_live_run_replays_offline_to_the_same_rows_and_ledger(
         client=httpx2.Client(transport=httpx2.MockTransport(model)),
     )
     # The live run asked the sources with the address and the key, and the model with its key.
-    assert any(quote_plus(PERSONAL) in r.url for r in sources.sent)
-    assert any(("Authorization", f"Bearer {OPENALEX_KEY}") in r.headers for r in sources.sent)
+    wire = [r.on_the_wire() for r in sources.sent]
+    assert any(("mailto", PERSONAL) in w.params for w in wire)
+    assert any(("Authorization", f"Bearer {OPENALEX_KEY}") in w.headers for w in wire)
+    assert not any(PERSONAL in r.url or OPENALEX_KEY in str(r.headers) for r in sources.sent)
     assert model.seen and all(r.headers["authorization"] == f"Bearer {LLM_KEY}" for r in model.seen)
     (run,) = recorded["enrichment_run"]
     assert run["finished_at"] == "<time>" and len(recorded["record_enrichment"]) == run["records"]
@@ -332,40 +332,15 @@ def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path
         build_judge(replay, registry, replays)
 
 
-def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path: Path) -> None:
-    """The dev database password `kittum` is also PubMed's `tool=kittum`: recording with it would
-    refuse every PubMed request, so it refuses to start instead, as for any short or common secret
-    or one inside what Kittum sends. With a long password (one that holds an `@`, percent-encoded
-    in the DSN), PubMed is recorded, and the password itself is refused wherever it turns up."""
+def test_recording_refuses_a_long_password_wherever_it_turns_up(tmp_path: Path) -> None:
+    """With a password that holds an `@` (percent-encoded in the DSN), PubMed's `tool=kittum` is
+    recorded, and the password itself is refused in a source request and in a model request."""
     store = FilesystemStore(tmp_path / "artifacts")
     base = Settings(
-        database_url="postgresql://kittum:kittum@127.0.0.1:55432/kittum",
+        database_url="postgresql://kittum:kittum-local-dev@127.0.0.1:55432/kittum",
         artifact_dir=tmp_path / "artifacts",
         gateway_record=tmp_path / "sources",
     )
-    for settings, name, problem in (
-        (base, "the database password", "at least 12 characters"),
-        (
-            replace(base, database_url="postgresql://kittum:administrator@db/kittum"),
-            "the database password",
-            "not a common word",
-        ),
-        (
-            replace(base, database_url="unused", openalex_api_key="example.invalid"),
-            "KITTUM_OPENALEX_API_KEY",
-            "part of what Kittum sends",
-        ),
-    ):
-        with pytest.raises(ConfigurationError, match=f"recording needs {name}.*{problem}") as e:
-            build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
-        assert "administrator" not in str(e.value) and "example.invalid" not in str(e.value)
-    with pytest.raises(ConfigurationError, match="recording needs the database password"):
-        build_backends(
-            replace(base, gateway_record=None, llm_record=tmp_path / "models"),
-            ModelRegistry.load(),
-            store,
-        )
-
     password = "rec@rd-Only-7f3k"
     recipe_id = "qwen3.8-27b-bf16"
     settings = replace(
@@ -376,12 +351,12 @@ def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path
     )
     build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
     sources = RecordingTransport(
-        FakeTransport(), tmp_path / "sources", secrets=recording_secrets(settings)
+        FakeTransport(), tmp_path / "sources", credentials=credentials(settings)
     )
     efetch = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
     pubmed = HttpRequest(url=efetch, params=(("id", "32450107"), ("tool", "kittum")))
     assert sources.send(pubmed).status == 404  # recorded, whatever PubMed said
-    with pytest.raises(RecordingRefused, match="parameter 'term'"):
+    with pytest.raises(RecordingRefused, match="configured private value"):
         sources.send(HttpRequest(url=efetch, params=(("term", password),)))
 
     answer = {"model": "served", "choices": [{"message": {"content": "{}"}}]}

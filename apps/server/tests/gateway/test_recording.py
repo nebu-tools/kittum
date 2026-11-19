@@ -1,14 +1,17 @@
 """Recording the sources' responses in a live run, and replaying them offline.
 
-A recording must hold no secret and no contact address, so a request that would put one into it
-is refused before it is sent, and the address is replaced only where a source takes it. A replay
-must answer as the sources did, in order: a source that failed and later recovered fails and
-recovers again. The live run sees the same bytes its replay will, so their hashes agree.
+A recording is keyed by the request as the caller built it, which holds no private value: the
+gateway attaches the contact address and the keys only for the send. A request that would put a
+private value into a key anyway is refused before it is sent, and what a source echoes back is
+scrubbed before it is written. A replay must answer as the sources did, in order: a source that
+failed and later recovered fails and recovers again. The live run sees the same bytes its replay
+will, so their hashes agree.
 """
 
 import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 import httpx2
 import pytest
@@ -16,6 +19,8 @@ import pytest
 from kittum.core import FixedClock, sha256_hex
 from kittum.gateway import (
     CONTACT_PLACEHOLDER,
+    REDACTED,
+    Credentials,
     HttpRequest,
     HttpResponse,
     NotRecorded,
@@ -36,8 +41,9 @@ if TYPE_CHECKING:
 
 ALICE = "alice@example.org"
 SECRET = "cs-9f8e7d6c5b4a"
-UNPAYWALL = f"https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4?email={ALICE}"
-UNREACHABLE = f"https://api.unpaywall.org/v2/10.1186%2Fs12916-026-05037-x?email={ALICE}"
+ALICES = Credentials.of((SECRET,), contact_email=ALICE, ncbi_api_key="ncbi-key-1234")
+UNPAYWALL = "https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4"
+UNREACHABLE = "https://api.unpaywall.org/v2/10.1186%2Fs12916-026-05037-x"
 
 
 class Sources:
@@ -49,7 +55,7 @@ class Sources:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         self.sent.append(request)
-        answer = self.scripts[request.url.split("?")[0]].pop(0)
+        answer = self.scripts[request.url].pop(0)
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -59,69 +65,81 @@ def _written(directory: Path) -> bytes:
     return b"".join(p.read_bytes() for p in directory.iterdir() if p.is_file())
 
 
-def test_a_recording_refuses_secrets_and_holds_the_contact_address_only_as_a_placeholder(
+def test_a_recording_is_keyed_by_the_public_request_and_holds_no_private_value(
     tmp_path: Path,
 ) -> None:
     directory = tmp_path / "sources"
-    ok = response(200, b'{"message": "ok"}', (("Content-Type", "application/json"),))
+    echo = json.dumps({"message": "ok", "asked_by": ALICE, "key": "ncbi-key-1234"}).encode()
+    ok = response(200, echo, (("Content-Type", "application/json"), ("X-Echo", SECRET)))
     live = Sources(
         {
             "https://api.crossref.org/works/10.1000%2Fx": [ok],
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi": [ok],
-            "https://www.ebi.ac.uk/europepmc/webservices/rest/search": [ok],
+            f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={CONTACT_PLACEHOLDER}": [
+                ok
+            ],
         }
     )
-    recording = RecordingTransport(live, directory, contact_email=ALICE, secrets=(SECRET,))
+    recording = RecordingTransport(live, directory, credentials=ALICES)
 
     def refused(request: HttpRequest, match: str) -> None:
         with pytest.raises(RecordingRefused, match=match) as caught:
             recording.send(request)
         assert SECRET not in str(caught.value) and ALICE not in str(caught.value)
 
-    # A configured secret in a parameter Kittum does not know as a credential: refused, by name.
+    # A private value a caller put into the URL or the query, in any listed spelling: refused, unnamed.
     refused(
         HttpRequest(
             url="https://api.crossref.org/works/10.1000%2Fx", params=(("client_secret", SECRET),)
         ),
-        "parameter 'client_secret'",
+        "configured private value",
     )
     refused(HttpRequest(url="https://reader:pw@api.crossref.org/works/10.1000%2Fx"), "user info")
-    # The address anywhere but its source's contact parameter: a search for Alice is not Alice's
-    # contact address, and must not turn into the placeholder.
     refused(
         HttpRequest(url=f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={ALICE}"),
-        "parameter 'query'",
+        "configured private value",
     )
     refused(
-        HttpRequest(url=f"https://api.crossref.org/works/10.1000%2Fx?query.author={ALICE.upper()}"),
-        "parameter 'query.author'",
+        HttpRequest(url=f"https://api.crossref.org/works/10.1000%2Fx?query.author={quote(ALICE)}"),
+        "configured private value",
     )
     assert live.sent == []  # nothing refused was sent
 
-    # Where a source takes the address, it is replaced; a known credential parameter is dropped.
-    crossref = HttpRequest(url=f"https://api.crossref.org/works/10.1000%2Fx?mailto={ALICE}")
-    ncbi = HttpRequest(
-        url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
-        params=(("id", "1"), ("email", ALICE), ("api_key", SECRET)),
+    # The gateway attaches the values for the send; the key is the request without them.
+    crossref = ALICES.attach(
+        "crossref", HttpRequest(url="https://api.crossref.org/works/10.1000%2Fx")
+    )
+    ncbi = ALICES.attach(
+        "pubmed",
+        HttpRequest(
+            url="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi", params=(("id", "1"),)
+        ),
     )
     search = HttpRequest(
         url=f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={CONTACT_PLACEHOLDER}"
     )
     for request in (crossref, ncbi, search):
-        assert recording.send(request).status == 200
+        answered = recording.send(request)
+        assert ALICE.encode() not in answered.body and SECRET not in str(answered.headers)
+    assert ("mailto", ALICE) in live.sent[0].on_the_wire().params
+    assert {("email", ALICE), ("api_key", "ncbi-key-1234")} <= set(
+        live.sent[1].on_the_wire().params
+    )
     manifest = json.loads((directory / "manifest.json").read_text())
     assert sorted(manifest) == [
-        "https://api.crossref.org/works/10.1000%2Fx?mailto=contact%40example.invalid",
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?id=1&email=contact%40example.invalid",
+        "https://api.crossref.org/works/10.1000%2Fx",
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?id=1",
         "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=contact%40example.invalid",
     ]
     written = _written(directory).lower()
-    assert SECRET.encode() not in written and b"alice" not in written
+    assert SECRET.encode() not in written and b"alice" not in written and b"ncbi-key" not in written
+    assert CONTACT_PLACEHOLDER.encode() in written and REDACTED.encode() in written
 
-    # A replay with another contact address finds Bob's requests; Alice's search never matches.
-    replay = RecordedTransport(directory, contact_email="bob@example.org")
-    bob = HttpRequest(url="https://api.crossref.org/works/10.1000%2Fx?mailto=bob@example.org")
-    assert replay.send(bob).body == ok.body
+    # A replay needs no credentials and answers the same public request.
+    replay = RecordedTransport(directory)
+    assert replay.send(HttpRequest(url="https://api.crossref.org/works/10.1000%2Fx")).body == (
+        answered.body
+    )
     with pytest.raises(NotRecorded):
         replay.send(
             HttpRequest(
@@ -143,13 +161,13 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     echo = json.dumps({"doi": "10.1186/s12916-026-04943-4", "email": ALICE}).encode()
     live = Sources(
         {
-            UNPAYWALL.split("?")[0]: [
+            UNPAYWALL: [
                 response(503),
                 response(503),
                 response(200, echo, (("Content-Type", "application/json"),)),
             ],
-            UNREACHABLE.split("?")[0]: [
-                httpx2.ConnectError(f"connection refused for {UNREACHABLE}"),
+            UNREACHABLE: [
+                httpx2.ConnectError(f"connection refused for {UNREACHABLE}?email={ALICE}"),
                 httpx2.DecodingError("Error -3 while decompressing data: incorrect header check"),
                 httpx2.TooManyRedirects("Exceeded maximum allowed redirects."),
                 response(200, b"{}", (("Content-Type", "application/json"),)),
@@ -161,12 +179,15 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
         source="unpaywall", requests_per_second=100, concurrency=2, terms_url="https://x.test"
     )
 
-    def gateway(transport: RecordingTransport | RecordedTransport) -> SourceGateway:
+    def gateway(
+        transport: RecordingTransport | RecordedTransport, credentials: Credentials
+    ) -> SourceGateway:
         return SourceGateway(
             database=database,
             transport=transport,
             artifacts=MemoryStore(),
             policies={"unpaywall": policy},
+            credentials=credentials,
             clock=clock,
             buckets="memory",
             cache="memory",
@@ -174,19 +195,21 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
             sleep=lambda _seconds: None,
         )
 
-    def session(transport: RecordingTransport | RecordedTransport, contact: str) -> HttpResponse:
-        sources = gateway(transport)
-        url, unreachable = UNPAYWALL.replace(ALICE, contact), UNREACHABLE.replace(ALICE, contact)
+    def session(
+        transport: RecordingTransport | RecordedTransport, credentials: Credentials
+    ) -> HttpResponse:
+        sources = gateway(transport, credentials)
         with pytest.raises(SourceUnavailable):
-            sources.fetch("unpaywall", HttpRequest(url=url))
-        for failure in (httpx2.ConnectError, httpx2.DecodingError, httpx2.TooManyRedirects):
-            with pytest.raises(failure) as raised:
-                sources.fetch("unpaywall", HttpRequest(url=unreachable))
-            assert type(raised.value) is failure
-        assert sources.fetch("unpaywall", HttpRequest(url=unreachable)).body == b"{}"
-        return sources.fetch("unpaywall", HttpRequest(url=url))
+            sources.fetch("unpaywall", HttpRequest(url=UNPAYWALL))
+        for failure in ("ConnectError", "DecodingError", "TooManyRedirects"):
+            with pytest.raises(SourceUnavailable) as raised:
+                sources.fetch("unpaywall", HttpRequest(url=UNREACHABLE))
+            assert raised.value.reason is not None and f"({failure})" in raised.value.reason
+            assert "alice" not in str(raised.value)
+        assert sources.fetch("unpaywall", HttpRequest(url=UNREACHABLE)).body == b"{}"
+        return sources.fetch("unpaywall", HttpRequest(url=UNPAYWALL))
 
-    answered = session(RecordingTransport(live, directory, contact_email=ALICE), ALICE)
+    answered = session(RecordingTransport(live, directory, credentials=ALICES), ALICES)
     assert answered.status == 200 and len(live.sent) == 7
     # A failure is recorded by its kind alone: its message quoted the address.
     assert b"alice" not in _written(directory).lower()
@@ -194,8 +217,8 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     assert json.loads(answered.body)["email"] == CONTACT_PLACEHOLDER
     assert answered.body_hash == sha256_hex(answered.body)
 
-    replay = RecordedTransport(directory, contact_email="bob@example.org")
-    replayed = session(replay, "bob@example.org")
+    replay = RecordedTransport(directory)
+    replayed = session(replay, Credentials.of(contact_email="bob@example.org"))
     assert (replayed.status, replayed.body, replayed.body_hash) == (
         200,
         answered.body,
@@ -203,4 +226,4 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     )
     # The live run asked three times; a fourth has nothing left to answer it.
     with pytest.raises(NotRecorded, match="no recorded response 4"):
-        replay.send(HttpRequest(url=UNPAYWALL.replace(ALICE, "bob@example.org")))
+        replay.send(HttpRequest(url=UNPAYWALL))

@@ -21,8 +21,9 @@ from fastapi import APIRouter, Header, HTTPException, Path, Response
 from pydantic import Field
 
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
+from kittum.app import credentials
 from kittum.core import Id, NotFoundError, Record, new_id
-from kittum.ledger import LedgerIntegrityError, SigningKey
+from kittum.ledger import LedgerIntegrityError, SealRefused, SigningKey
 from kittum.protocol import Stage
 from kittum.report import (
     CORE_TARGETS,
@@ -309,8 +310,9 @@ def seal(project_id: Id, body: SealRequest, ctx: Context) -> SealedBundle:
                 rights=RightsProfile(id="request", withhold_sources=body.withhold_sources),
                 ledger=ledger,
                 clock=ctx.clock,
+                private=credentials(ctx.settings).private,
             )
-        except LedgerIntegrityError as e:
+        except (LedgerIntegrityError, SealRefused) as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
     return SealedBundle(
         path=str(bundle.path),

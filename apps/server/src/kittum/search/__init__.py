@@ -6,12 +6,10 @@ query translation, limits, dates, counts, and the raw responses by hash.
 
 from kittum.search.count import (
     SOURCE_NAMES,
-    TRANSPORT_ERRORS,
     QueryCount,
     QueryDialect,
     count_hits,
     failure_message,
-    unreachable,
 )
 from kittum.search.ctgov import CtgovSource
 from kittum.search.europepmc import EuropePmcSource
@@ -26,7 +24,6 @@ __all__ = [
     "IMPORT_FORMATS",
     "LIVE_PLATFORMS",
     "SOURCE_NAMES",
-    "TRANSPORT_ERRORS",
     "CtgovSource",
     "EuropePmcSource",
     "PubMedSource",
@@ -45,5 +42,4 @@ __all__ = [
     "live_source",
     "parse_export",
     "run",
-    "unreachable",
 ]

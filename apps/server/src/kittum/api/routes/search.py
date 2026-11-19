@@ -13,7 +13,6 @@ from kittum.core import Id, Record
 from kittum.gateway import GatewayError
 from kittum.ledger import Ledger  # noqa: TC001
 from kittum.search import (
-    TRANSPORT_ERRORS,
     SearchExecution,
     SearchPlan,
     Source,
@@ -24,7 +23,6 @@ from kittum.search import (
     list_executions,
     live_source,
     run,
-    unreachable,
 )
 
 if TYPE_CHECKING:
@@ -80,8 +78,6 @@ def _get_source(plan: SearchPlan, ctx: Context) -> Source:
         plan.source,
         ctx.gateway,
         ctx.artifacts,
-        contact_email=ctx.settings.contact_email,
-        ncbi_api_key=ctx.settings.ncbi_api_key,
         clock=ctx.clock,
     )
     if source is None:
@@ -104,19 +100,15 @@ def run_search(
             # The execution comes back with every record it found: the lead's catalogue.
             _require_lead(tx, project_id, body.actor_id)
             source = _get_source(body.plan, ctx)
-            try:
-                return run(
-                    tx,
-                    project_id,
-                    body.plan,
-                    source,
-                    ledger=ledger,
-                    actor_id=body.actor_id,
-                    artifacts=ctx.artifacts,
-                )
-            except TRANSPORT_ERRORS as exc:
-                # A connection that failed or timed out reaches here as the transport raised it.
-                raise unreachable(body.plan.source, exc) from exc
+            return run(
+                tx,
+                project_id,
+                body.plan,
+                source,
+                ledger=ledger,
+                actor_id=body.actor_id,
+                artifacts=ctx.artifacts,
+            )
     except (SourceError, GatewayError) as exc:
         raise HTTPException(status_code=502, detail=failure_message(exc)) from exc
 

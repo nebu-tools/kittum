@@ -16,7 +16,7 @@ wrong) is refused as a failure of the source, so one work's links never land on 
 import re
 from datetime import date
 from typing import TYPE_CHECKING, Any, Literal
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from kittum.core import Record, canonical_doi
 from kittum.enrich._http import SourceUnavailable, fetch_json
@@ -57,11 +57,8 @@ class Work(Record):
     pdf_links: tuple[OaLocation, ...] = ()
 
 
-def _url(doi: str, email: str | None) -> str:
-    base = f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}"
-    if not email:
-        return base
-    return f"{base}?{urlencode({'mailto': email})}"
+def _url(doi: str) -> str:
+    return f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}"
 
 
 def _updates(message: dict[str, Any]) -> tuple[WorkUpdate, ...]:
@@ -169,8 +166,8 @@ def _pdf_links(message: dict[str, Any]) -> tuple[OaLocation, ...]:
     return tuple(found.values())
 
 
-def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None:
-    body = fetch_json(gateway, SOURCE, _url(doi, email))
+def work(gateway: Gateway, doi: str) -> Work | None:
+    body = fetch_json(gateway, SOURCE, _url(doi))
     if body is None:
         return None
     if not isinstance(body, dict) or not isinstance(body.get("message"), dict):

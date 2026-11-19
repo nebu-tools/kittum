@@ -10,8 +10,9 @@ open-access waterfall for every report (every lookup source that applies, every 
 through the real HTTP transport. Every response is kept under the URL that asked for it, with its
 status and content type; a PDF that the repository already holds is referenced, not copied. A URL
 the manifest already holds is answered from it, so a run records only what is new (`--all`
-records everything again). The contact address is `support.CONTACT_EMAIL`, and no API key is
-used, so none can end up in a recording; CORE, which needs one, is left out.
+records everything again). The contact address is `support.CONTACT_EMAIL`; the gateway attaches
+it for the send, and every response is scrubbed of it before it is kept. No API key is used;
+CORE, which needs one, is left out.
 """
 
 import contextlib
@@ -32,12 +33,18 @@ from kittum.corpus import latest_revision, reports
 from kittum.documents import FullTextLocation, acquire
 from kittum.enrich import (
     LOOKUP_SOURCES,
-    EnrichmentConfig,
     SourceUnavailable,
     lookup_applies,
     lookup_full_text,
 )
-from kittum.gateway import HttpRequest, HttpResponse, HttpxTransport, RecordedTransport
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    HttpResponse,
+    HttpxTransport,
+    RecordedTransport,
+    recording_key,
+)
 from kittum.gateway.testing import PassThroughGateway
 from kittum.ledger import PostgresLedger
 from kittum.runs import JobContext, PostgresJobQueue
@@ -87,14 +94,15 @@ _EXTENSIONS = {"application/json": ".json", "application/pdf": ".pdf", "text/htm
 class RecordingTransport:
     """Sends real requests and keeps each response under the URL that produced it."""
 
-    def __init__(self, directory: Path, *, again: bool = False) -> None:
+    def __init__(self, directory: Path, credentials: Credentials, *, again: bool = False) -> None:
         self._directory = directory
-        self._inner = HttpxTransport(contact_email=CONTACT_EMAIL)
+        self._credentials = credentials
+        self._inner = HttpxTransport()
         self._known = {sha256_hex(p.read_bytes()): p for p in PDFS.glob("*.pdf")}
         self._recorded = (
             None
             if again or not (directory / "manifest.json").exists()
-            else RecordedTransport(directory, contact_email=CONTACT_EMAIL)
+            else RecordedTransport(directory)
         )
         self._have = (
             set(json.loads((directory / "manifest.json").read_text()))
@@ -104,9 +112,10 @@ class RecordingTransport:
         self.manifest: dict[str, dict[str, Any]] = {}
 
     def send(self, request: HttpRequest) -> HttpResponse:
-        if self._recorded is not None and request.url in self._have:
+        key = recording_key(request, self._credentials)
+        if self._recorded is not None and key in self._have:
             return self._recorded.send(request)
-        response = self._inner.send(request)
+        response = self._credentials.scrub(self._inner.send(request))
         content_type = next(
             (v.split(";")[0].strip() for k, v in response.headers if k.lower() == "content-type"),
             None,
@@ -115,9 +124,9 @@ class RecordingTransport:
         if known is not None:
             name = str(Path("..", "..", "..", "documents", "fixtures", known.name))
         else:
-            name = sha256_hex(request.url.encode())[:16] + _EXTENSIONS.get(content_type or "", "")
+            name = sha256_hex(key.encode())[:16] + _EXTENSIONS.get(content_type or "", "")
             (self._directory / name).write_bytes(response.body)
-        self.manifest[request.url] = {
+        self.manifest[key] = {
             "file": name,
             "status": response.status,
             "content_type": content_type,
@@ -206,15 +215,14 @@ def _scenario(
     if not waterfall:
         return
     facts = report_facts(tx, project_id)
-    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
     for report in reports(tx, project_id, revision.id):
         found = locations(tx, project_id, report.report_id, on=clock.now().date())
         ids = facts[report.report_id].ids
         for source in LOOKUP_SOURCES:
-            if not lookup_applies(source, ids, config=config):
+            if not lookup_applies(source, ids, gateway):
                 continue
             try:
-                answer = lookup_full_text(gateway, source, ids, config=config)
+                answer = lookup_full_text(gateway, source, ids)
             except SourceUnavailable:
                 continue
             found += [
@@ -224,9 +232,7 @@ def _scenario(
         # Without Europe PMC (an outage) there is no PMCID, and PMC's ID converter is asked.
         if ids.pmcid and (ids.pmid or ids.doi):
             with contextlib.suppress(SourceUnavailable):
-                lookup_full_text(
-                    gateway, "pmc", ids.model_copy(update={"pmcid": None}), config=config
-                )
+                lookup_full_text(gateway, "pmc", ids.model_copy(update={"pmcid": None}))
         # Every location, not only up to the first PDF: a replay may need any of them.
         for location in found:
             acquire(
@@ -246,8 +252,9 @@ def main() -> None:
     import sys
 
     STACK.mkdir(exist_ok=True)
-    transport = RecordingTransport(STACK, again="--all" in sys.argv)
-    gateway = PassThroughGateway(transport)
+    credentials = Credentials.of(contact_email=CONTACT_EMAIL)
+    transport = RecordingTransport(STACK, credentials, again="--all" in sys.argv)
+    gateway = PassThroughGateway(transport, credentials)
     url = os.environ["KITTUM_DATABASE_URL"]
     with psycopg.Connection[dict[str, Any]].connect(url, row_factory=dict_row) as connection:
         try:

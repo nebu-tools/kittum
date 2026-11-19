@@ -414,14 +414,7 @@ CHUNK = 50
 """Records per transaction: one batched call per source for OpenAlex, Europe PMC, and PubTator."""
 
 
-def enrichment_config(ctx: AppContext) -> EnrichmentConfig:
-    return EnrichmentConfig(
-        contact_email=ctx.settings.contact_email,
-        openalex_api_key=ctx.settings.openalex_api_key,
-        semantic_scholar_api_key=ctx.settings.semantic_scholar_api_key,
-        core_api_key=ctx.settings.core_api_key,
-        batch_size=CHUNK,
-    )
+ENRICHMENT_CONFIG = EnrichmentConfig(batch_size=CHUNK)
 
 
 def _store_chunk(
@@ -510,7 +503,7 @@ def _carried(tx: Tx, run: dict[str, Any]) -> dict[Id, tuple[SourceFailure, ...]]
 def enrichment_handler(
     ctx: AppContext, gateway: Gateway, ledger: Ledger, queue: JobQueue
 ) -> Handler:
-    config = enrichment_config(ctx)
+    config = ENRICHMENT_CONFIG
 
     def handle(job: Job, job_ctx: JobContext) -> JobOutput:
         run_id = UUID(job.spec.payload["run_id"])
@@ -624,6 +617,7 @@ def _retrieve_after(
 
 
 __all__ = [
+    "ENRICHMENT_CONFIG",
     "ENRICHMENT_FINISHED",
     "ENRICHMENT_JOB",
     "ENRICHMENT_REQUESTED",
@@ -633,7 +627,6 @@ __all__ = [
     "RecordFlag",
     "SourceFailureView",
     "SourceProgress",
-    "enrichment_config",
     "enrichment_handler",
     "enrichment_run",
     "latest_enrichment_run",

@@ -20,13 +20,16 @@ request. Every decision goes through
 
 import functools
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx2
+import pymupdf
 import yaml
 
+from kittum.app import attach_full_text
 from kittum.core import SystemClock, new_id
 from kittum.corpus import confirm, ingest, list_proposals, merge
 from kittum.judge import (
@@ -209,6 +212,23 @@ class ReviewWorld:
                 ).id
         self.records = _records_of(tx, self, revision)
         return revision
+
+    def attach(self, records: list[ScreeningRecord]) -> None:
+        """Attach a full text to each record, as the lead's upload does: the PRISMA flow counts a
+        report retrieved from this event, and from nothing else."""
+        for record in records:
+            doc = pymupdf.open()
+            doc.new_page().insert_text((72, 72), record.title[:80])
+            with self.db.transaction() as tx:
+                attach_full_text(
+                    tx,
+                    self.project_id,
+                    record.item_ref,
+                    doc.tobytes(),
+                    actor_id=self.people.lead,
+                    artifacts=self.artifacts,
+                    ledger=self.ledger,
+                )
 
     # Screening
 
@@ -559,6 +579,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     # Full text: the inhaler trial's report could not be obtained.
     ft: Stage = "full_text"
     retrieved = [world.record(t[k]) for k in ("patch", "gum", "combination", "followup", "spray")]
+    world.attach(retrieved)
     world.open(ft, retrieved, unclear)
     world.snapshot(seqs.statuses, ft)
     c = world.criteria(ft)
@@ -708,12 +729,14 @@ def tranexamic_review(db: Database) -> ReviewWorld:
     world.audit(ta)
     assert world.adjudicate(ta, lambda _: (None, exclude(ta, c, "RCT-E5"))) == 1
 
+    # The lead attaches the full texts one by one, the CTIS entry's results summary last, and
+    # opens full text with all four.
     ft: Stage = "full_text"
-    world.open(
-        ft,
-        [world.record(t[k]) for k in ("harbour", "estuary", "estuary_followup", "ctis_harbour")],
-        unclear,
-    )
+    sought = [
+        world.record(t[k]) for k in ("harbour", "estuary", "estuary_followup", "ctis_harbour")
+    ]
+    world.attach(sought)
+    world.open(ft, sought, unclear)
     c = world.criteria(ft)
     for key in ("harbour", "estuary_followup", "ctis_harbour"):
         world.decide(a, ft, t[key], include(ft, c))
@@ -756,28 +779,35 @@ def _records_of(tx: Tx, world: ReviewWorld, revision: Id) -> list[ScreeningRecor
 class OverHttp:
     """`inner`'s answers, served as an OpenAI-compatible server serves them, through Kittum's
     live backend: every request body and every response lands in `store` exactly as in a real
-    review. The server thinks out loud first, so each response carries `reasoning_content`."""
+    review. The server thinks out loud first, so each response carries `reasoning_content`.
+
+    The judge sends requests concurrently, so each answer is kept under the messages it answers
+    and the server looks it up from the request body it receives."""
 
     def __init__(
         self, inner: LlmBackend, recipe: ModelRecipe, store: MemoryStore, *, reasoning: str
     ) -> None:
         self._inner = inner
-        self._answer = ""
+        self._answers: dict[str, str] = {}
+        self._lock = threading.Lock()
         self.seen: list[httpx2.Request] = []
         self.replies: list[bytes] = []
 
         def serve(request: httpx2.Request) -> httpx2.Response:
-            self.seen.append(request)
+            answer = self._answers[_messages_key(json.loads(request.content)["messages"])]
+            with self._lock:
+                self.seen.append(request)
+                number = len(self.seen)
             reply = json.dumps(
                 {
-                    "id": f"chatcmpl-{len(self.seen)}",
+                    "id": f"chatcmpl-{number}",
                     "model": recipe.api_model,
                     "choices": [
                         {
                             "index": 0,
                             "message": {
                                 "role": "assistant",
-                                "content": self._answer,
+                                "content": answer,
                                 "reasoning_content": reasoning,
                             },
                             "finish_reason": "stop",
@@ -786,7 +816,8 @@ class OverHttp:
                     "usage": {"prompt_tokens": 900, "completion_tokens": 120},
                 }
             ).encode()
-            self.replies.append(reply)
+            with self._lock:
+                self.replies.append(reply)
             return httpx2.Response(200, content=reply, headers={"content-type": "application/json"})
 
         self._http = OpenAICompatibleBackend(
@@ -797,5 +828,12 @@ class OverHttp:
         )
 
     def complete(self, request: CompletionRequest) -> Completion:
-        self._answer = self._inner.complete(request).text
+        key = _messages_key([m.model_dump() for m in request.messages])
+        answer = self._inner.complete(request).text
+        with self._lock:
+            self._answers[key] = answer
         return self._http.complete(request)
+
+
+def _messages_key(messages: list[dict[str, Any]]) -> str:
+    return json.dumps(messages, sort_keys=True)

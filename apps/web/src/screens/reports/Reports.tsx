@@ -16,13 +16,12 @@ import type {
   Milestone,
   PrismaFlow,
   RenderedReport,
-  RetrievalItem,
   RunListing,
   SealedBundle,
 } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { formatDateTime } from "../../lib/format.ts";
-import { isRegistryOnly, revealLabel } from "../../lib/labels.ts";
+import { revealLabel } from "../../lib/labels.ts";
 import { Button } from "../../ui/Button.tsx";
 import { EmptyState } from "../../ui/Empty.tsx";
 import { useKeys } from "../../ui/keys.ts";
@@ -68,7 +67,11 @@ const OPEN: ReadonlyArray<readonly [keyof PrismaFlow & string, string, string]> 
   ["records_awaiting_screening", "record not yet screened", "records not yet screened"],
   ["records_unresolved", "record in conflict", "records in conflict"],
   ["reports_not_retrieved", "report without a full text", "reports without a full text"],
-  ["reports_awaiting_assessment", "report not yet assessed", "reports not yet assessed"],
+  [
+    "reports_awaiting_assessment",
+    "report with a full text, not yet assessed",
+    "reports with a full text, not yet assessed",
+  ],
   [
     "reports_awaiting_classification",
     "report with insufficient information",
@@ -82,22 +85,19 @@ const OPEN: ReadonlyArray<readonly [keyof PrismaFlow & string, string, string]> 
   ],
 ];
 
-/** The open work of flows, as words. With the registry records known, the reports not
- * retrieved split into articles that need a PDF and registry records with no article yet, in the
- * words Retrieval and Progress use. */
-const openWork = (flows: ReadonlyArray<PrismaFlow>, registry?: ReadonlySet<string> | null) =>
+/** The open work of flows, as words. The reports not retrieved split, by the server's count,
+ * into articles that need a PDF and registry records with no article yet, in the words Retrieval
+ * and Progress use. */
+const openWork = (flows: ReadonlyArray<PrismaFlow>) =>
   OPEN.flatMap(([key, one, many]) => {
     const n = flows.reduce((sum, f) => sum + Number(f[key] ?? 0), 0);
     if (!n) return [];
-    if (key !== "reports_not_retrieved" || !registry) return [plural(n, one, many)];
-    const entries = flows
-      .flatMap((f) => f.members["reports_not_retrieved"] ?? [])
-      .filter((ref) => registry.has(ref)).length;
+    if (key !== "reports_not_retrieved") return [plural(n, one, many)];
+    const entries = flows.reduce((sum, f) => sum + f.reports_not_retrieved_registry, 0);
+    if (!entries) return [plural(n, one, many)];
     return [
       n - entries ? plural(n - entries, "article needs a PDF", "articles need a PDF") : null,
-      entries
-        ? plural(entries, "registry record, no article yet", "registry records, no article yet")
-        : null,
+      plural(entries, "registry record, no article yet", "registry records, no article yet"),
     ].filter((x) => x !== null);
   });
 
@@ -143,8 +143,6 @@ interface Overview {
   readonly runs?: ReadonlyArray<RunListing> | null;
   readonly appraisable?: ReadonlyArray<AppraisableReport> | null;
   readonly ledger?: LedgerSummary | null;
-  /** Every report with its identifiers, to tell registry records from articles. */
-  readonly reports?: ReadonlyArray<RetrievalItem> | null;
 }
 
 type Target = "prisma" | "ai_disclosure" | "extraction" | "risk_of_bias";
@@ -234,7 +232,6 @@ export function ReportsScreen() {
     void settle(run(workbench.extractionRuns(caller))).then(part("runs"));
     void settle(run(workbench.appraisableReports(caller))).then(part("appraisable"));
     void settle(run(workbench.ledger(caller))).then(part("ledger"));
-    void settle(run(workbench.fullTexts(caller))).then(part("reports"));
     return () => {
       live = false;
     };
@@ -432,10 +429,7 @@ export function ReportsScreen() {
   const brokenAt = ledger && !ledger.ok ? (ledger.verify?.first_bad_seq ?? null) : null;
   const accepted = overview.runs?.reduce((n, r) => n + r.accepted, 0);
   const appraisals = overview.appraisable?.flatMap((r) => r.appraisals).length;
-  const registry = overview.reports
-    ? new Set(overview.reports.filter(isRegistryOnly).map((r) => r.item_ref))
-    : null;
-  const open = openWork(overview.asOf?.flows ?? [], registry);
+  const open = openWork(overview.asOf?.flows ?? []);
   const blocked = {
     extraction: accepted === 0 ? "No value is accepted yet." : null,
     rob: appraisals === 0 ? "No result is appraised yet." : null,
@@ -577,7 +571,7 @@ export function ReportsScreen() {
                 id="prisma"
                 title="PRISMA 2020 flow"
                 what="One flow diagram per question, as SVG, with the counts behind it."
-                now={<PrismaNow asOf={overview.asOf} scopeLabel={scopeLabel} registry={registry} />}
+                now={<PrismaNow asOf={overview.asOf} scopeLabel={scopeLabel} />}
                 state={<FreshnessLine f={state.prisma} integrity={integrity} />}
                 stored={stored.prisma}
                 fetchFile={fetchFile}
@@ -723,7 +717,6 @@ export function ReportsScreen() {
           svg={svg}
           scope={scopeLabel(flow.scope_id)}
           integrity={integrity(flow.cutoff_seq)}
-          registry={registry}
         />
       ))}
       {disclosure ? (
@@ -978,16 +971,14 @@ function Pending({ value, failed }: { value: unknown; failed: string }) {
 function PrismaNow({
   asOf,
   scopeLabel,
-  registry,
 }: {
-  registry: ReadonlySet<string> | null;
   asOf: AsOf | null | undefined;
   scopeLabel: (id: string) => string;
 }) {
   if (!asOf) return <Pending value={asOf} failed="Kittum could not count the flow just now." />;
   if (asOf.flows.length === 0)
     return <span className="text-ink-2">No protocol is published yet.</span>;
-  const open = openWork(asOf.flows, registry);
+  const open = openWork(asOf.flows);
   const failing = asOf.flows.flatMap((f) => f.checks).filter((c) => !c.holds).length;
   const only = asOf.flows.length === 1 ? asOf.flows[0] : undefined;
   return (
@@ -1188,21 +1179,19 @@ function PrismaSection({
   svg,
   scope,
   integrity,
-  registry,
 }: {
   anchor?: string | undefined;
   flow: PrismaFlow;
   svg: Diagram | null;
   scope: string;
   integrity: Integrity | null;
-  registry: ReadonlySet<string> | null;
 }) {
   const [large, setLarge] = useState(false);
   const [fit, setFit] = useState(true);
   const alt = `PRISMA 2020 flow diagram for ${scope}`;
   const file = svg ? { ...svg.download, name: `prisma-${flow.scope_id}.svg` } : null;
   const failing = flow.checks.filter((c) => !c.holds);
-  const open = openWork([flow], registry);
+  const open = openWork([flow]);
   const size = fit
     ? "[&>svg]:h-auto [&>svg]:max-h-[calc(100vh-14rem)] [&>svg]:w-auto [&>svg]:max-w-full"
     : "[&>svg]:h-auto [&>svg]:w-full";

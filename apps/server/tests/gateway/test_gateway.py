@@ -10,6 +10,7 @@ import stamina
 
 from kittum.core import FixedClock
 from kittum.gateway import (
+    Credentials,
     HttpRequest,
     HttpResponse,
     SourceBudgetExhausted,
@@ -74,6 +75,7 @@ def _gateway(
         transport=transport,
         artifacts=store or MemoryStore(),
         policies={policy.source: policy for policy in policies},
+        credentials=Credentials.of(contact_email="librarian@example.org"),
         clock=clock,
         buckets=buckets,
         max_attempts=max_attempts,

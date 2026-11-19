@@ -35,8 +35,10 @@ def _licence(value: Any) -> str | None:
     return value
 
 
-def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None) -> FullTextLookup | None:
-    if not api_key:
+def find(gateway: Gateway, ids: WorkIds) -> FullTextLookup | None:
+    """The gateway adds the key (`kittum.gateway.PLACEMENTS`); without one the source is not
+    asked: its licence asks for permission before commercial use."""
+    if not gateway.configured(SOURCE):
         return None
     doi = canonical_doi(ids.doi)
     if doi:
@@ -46,7 +48,7 @@ def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None) -> FullTextLook
     else:
         return None
     url = f"{BASE}/{quote(paper, safe=':/')}?{urlencode({'fields': 'externalIds,openAccessPdf'})}"
-    body = fetch_json(gateway, SOURCE, url, headers=(("x-api-key", api_key),))
+    body = fetch_json(gateway, SOURCE, url)
     if body is None:
         return FullTextLookup(source=SOURCE, url=url)
     if not isinstance(body, dict):

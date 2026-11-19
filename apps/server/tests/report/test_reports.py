@@ -17,9 +17,10 @@ from kittum.corpus import confirm, get_counts, ingest, list_proposals
 from kittum.judge import USER_TEMPLATE, VERIFIER_LIMITS
 from kittum.models import weights_hash
 from kittum.report import flow, load_review, one_line, render, render_files
-from kittum.report.prisma import svg
+from kittum.report.prisma import RETRIEVAL_NOTE, registry_records
 from kittum.report.prisma import svg as prisma_svg
-from kittum.report.renderers import exclusion_reasons, registry_records
+from kittum.report.renderers import exclusion_reasons
+from kittum.report.review import FULL_TEXT_ATTACHED
 from kittum.screening import Decision
 from kittum.search import SearchPlan, import_file
 from tests.report.support import (
@@ -215,8 +216,7 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
     notes = " ".join(part("note"))
     assert "* With AI involvement: people excluded the record, and the AI also proposed it" in notes
     assert "'" not in " ".join(t or "" for t in texts)  # typographic apostrophes in a figure
-    assert "Reports not retrieved: reports sought that had no full text in Kittum" in notes
-    assert "Retrieval was still open: 1 article needs a PDF." in notes
+    assert " ".join(RETRIEVAL_NOTE.split()) in " ".join(notes.split())
     ids = [NRT_SCOPE, "TRIALS", *(c.id for c in world.criteria("full_text"))]
     assert not [i for i in ids if i in words], ids
     # The lines of PRISMA 2020's template stay even when they can only say zero: no screening
@@ -706,40 +706,100 @@ def test_a_metric_the_report_computes_equals_what_screening_reports(
     assert compared == 4
 
 
+def _attachments(world: ReviewWorld) -> list[int]:
+    """The ledger positions of the review's full-text attachments, in order."""
+    with world.db.transaction() as tx:
+        rows = tx.execute(
+            "select seq from audit_event where project_id = %s and type = %s order by seq",
+            (world.project_id, FULL_TEXT_ATTACHED),
+        ).fetchall()
+    return [r["seq"] for r in rows]
+
+
+def _opened(world: ReviewWorld, stage: str) -> int:
+    with world.db.transaction() as tx:
+        row = tx.execute(
+            "select e.seq from screening_stage s join audit_event e on e.event_id ="
+            " s.opened_event_id where s.project_id = %s and s.stage = %s",
+            (world.project_id, stage),
+        ).fetchone()
+    assert row is not None
+    return row["seq"]
+
+
+def _shown(review: Review) -> list[str]:
+    files = {r.path: r.data for r in render_files(review, "prisma", TXA_SCOPE)}
+    drawing = ET.fromstring(files[f"RCT-{TXA_SCOPE}.svg"])
+    return [t.text or "" for t in drawing.iter("{http://www.w3.org/2000/svg}text")]
+
+
 def test_the_flow_tells_registry_records_from_articles_still_without_a_full_text(
     tranexamic: ReviewWorld,
 ) -> None:
-    """Before full text opens, every sought report is not retrieved. The figure splits them into
-    articles without a full text and trial registry entries by the workbench's rule (no DOI, and a
-    registry ID it knows or a registry as the journal), so Retrieval, Progress, and the flow count
-    the same reports; the split leaves the PRISMA count as it is."""
+    """Before any full text is attached, every sought report is not retrieved. The figure splits
+    them into articles without a full text and trial registry entries by the workbench's rule (no
+    DOI, and a registry ID it knows or a registry as the journal), so Retrieval, Progress, and the
+    flow count the same reports; the split leaves the PRISMA count as it is."""
     world = tranexamic
-    with world.db.transaction() as tx:
-        opened = tx.execute(
-            "select e.seq from screening_stage s join audit_event e on e.event_id ="
-            " s.opened_event_id where s.project_id = %s and s.stage = 'full_text'",
-            (world.project_id,),
-        ).fetchone()
-    assert opened is not None
-    review = review_at(world, opened["seq"] - 1)
+    review = review_at(world, _attachments(world)[0] - 1)
     f = flow(review, "RCT", TXA_SCOPE)
-    assert f.reports_not_retrieved == 4
-
-    def lines(drawing: str | bytes) -> list[str | None]:
-        return [t.text for t in ET.fromstring(drawing).iter("{http://www.w3.org/2000/svg}text")]
-
-    # HARBOUR's CTIS entry has no DOI and an EU CT number ("2023-900101-11-00"): a registry
-    # record, for the figure as for the workbench's rule, so the box splits the four.
-    files = {r.path: r.data for r in render_files(review, "prisma", TXA_SCOPE)}
-    shown = lines(files[f"RCT-{TXA_SCOPE}.svg"])
-    assert "Reports not retrieved: n = 4" in shown
-    assert any("Registry record, no article yet" in (t or "") for t in shown)
+    assert (f.reports_sought, f.reports_not_retrieved, f.reports_awaiting_assessment) == (4, 4, 0)
+    # HARBOUR's CTIS entry has no DOI and an EU CT number ("2023-900101-11-00").
     harbour = world.record(TXA_TITLES["ctis_harbour"]).item_ref
     assert harbour in registry_records(review)
-    # With one registry record among them, the box splits the four.
-    at = lines(svg(f, "PRISMA 2020 flow diagram", registry_not_retrieved=1)).index
+    assert f.members["reports_not_retrieved_registry"] == (harbour,)
+    assert f.reports_not_retrieved_registry == 1
+    at = _shown(review).index
     assert (
         at("Reports not retrieved: n = 4")
-        < at("  Article, PDF needed: n = 3")
+        < at("  Article, no full text attached: n = 3")
         < at("  Registry record, no article yet: n = 1")
     )
+
+
+def test_a_report_with_a_pdf_attached_awaits_assessment_whether_or_not_full_text_is_open(
+    tranexamic: ReviewWorld,
+) -> None:
+    """One report included at title and abstract, its PDF attached, full-text screening not open:
+    it is retrieved and awaits assessment, and the others are not retrieved. Opening full text
+    then changes no retrieval count; only decisions move reports on to assessed."""
+    world = tranexamic
+    first, *_, last = _attachments(world)
+    opened = _opened(world, "full_text")
+    assert last < opened
+
+    one = flow(review_at(world, first), "RCT", TXA_SCOPE)
+    assert (one.reports_sought, one.reports_not_retrieved, one.reports_assessed) == (4, 3, 0)
+    assert one.reports_awaiting_assessment == 1
+    assert one.members["reports_awaiting_assessment"] == (
+        world.record(TXA_TITLES["harbour"]).item_ref,
+    )
+    assert all(c.holds for c in one.checks), [c for c in one.checks if not c.holds]
+    at = _shown(review_at(world, first)).index
+    assert (
+        at("Reports not retrieved: n = 3")
+        < at("  Article, no full text attached: n = 2")
+        < at("  Registry record, no article yet: n = 1")
+    )
+
+    def retrieval(seq: int | None) -> tuple[int, int, int, int]:
+        f = flow(review_at(world, seq), "RCT", TXA_SCOPE)
+        assert all(c.holds for c in f.checks), [c for c in f.checks if not c.holds]
+        return (
+            f.reports_sought,
+            f.reports_not_retrieved,
+            f.reports_not_retrieved_registry,
+            f.reports_assessed + f.reports_awaiting_assessment,
+        )
+
+    # Every full text attached: none not retrieved, before and after the stage opens, and once
+    # every report is decided.
+    assert retrieval(last) == retrieval(opened - 1) == retrieval(opened) == (4, 0, 0, 4)
+    assert retrieval(None) == (4, 0, 0, 4)
+    head = flow(review_at(world), "RCT", TXA_SCOPE)
+    assert (head.reports_assessed, head.reports_awaiting_assessment) == (4, 0)
+
+
+def test_the_retrieval_note_says_what_the_boxes_count(tranexamic: ReviewWorld) -> None:
+    shown = " ".join(" ".join(_shown(review_at(tranexamic))).split())
+    assert " ".join(RETRIEVAL_NOTE.split()) in shown

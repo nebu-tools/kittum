@@ -37,7 +37,7 @@ from kittum.app import (
 from kittum.assist import ASSIST_EVENT, StrategyAnswer, strict_schema, value_at
 from kittum.assist.paths import written
 from kittum.cli import main
-from kittum.gateway import RecordedTransport, SourceGateway, default_policies
+from kittum.gateway import Credentials, RecordedTransport, SourceGateway, default_policies
 from kittum.ledger import PostgresLedger
 from kittum.models import (
     CompletionRequest,
@@ -126,7 +126,8 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
             database=db,
             transport=RecordedTransport(COUNTS),
             artifacts=artifacts,
-            policies=default_policies(contact_email=CONTACT_EMAIL),
+            policies=default_policies(Credentials.of(contact_email=CONTACT_EMAIL)),
+            credentials=Credentials.of(contact_email=CONTACT_EMAIL),
             buckets="memory",
             cache="memory",
         ),
@@ -418,10 +419,10 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     # Offline, a strategy nobody recorded is an unreachable source, named by its request.
     unrecorded = count("nicotine lozenge[tiab]")
     assert unrecorded.status_code == 502, unrecorded.text
-    assert re.fullmatch(
-        r"Kittum could not reach PubMed\. No recorded response for"
-        r" https://eutils\.ncbi\.nlm\.nih\.gov/entrez/eutils/esearch\.fcgi\.",
-        unrecorded.json()["detail"],
+    assert unrecorded.json()["detail"] == (
+        "Kittum could not reach PubMed. No recorded response for"
+        " https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        "?db=pubmed&term=nicotine+lozenge%5Btiab%5D&retmax=0&tool=kittum."
     )
 
     # Accept two of three: the base with exactly those, the field marked as the model's.

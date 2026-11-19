@@ -6743,6 +6743,10 @@
             "title": "Reports Not Retrieved",
             "type": "integer"
           },
+          "reports_not_retrieved_registry": {
+            "title": "Reports Not Retrieved Registry",
+            "type": "integer"
+          },
           "reports_sought": {
             "title": "Reports Sought",
             "type": "integer"
@@ -6783,6 +6787,7 @@
           "ai_title_abstract",
           "reports_sought",
           "reports_not_retrieved",
+          "reports_not_retrieved_registry",
           "reports_assessed",
           "reports_awaiting_assessment",
           "reports_excluded",

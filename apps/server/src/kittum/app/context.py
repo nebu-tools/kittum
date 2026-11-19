@@ -26,6 +26,8 @@ from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.extraction import run_handler
 from kittum.gateway import (
     CONTACT_PLACEHOLDER,
+    REDACTED,
+    Credentials,
     HttpxTransport,
     RecordedTransport,
     RecordingTransport,
@@ -147,9 +149,8 @@ JUDGE_PROMPT_ROLE = "judge_prompt"
 replay refuses recordings without it."""
 
 
-RECORDING_SECRET_LENGTH = 12
-"""The shortest key or password a recording run accepts: a shorter one could stand in ordinary
-text, which recording would then refuse or redact."""
+SECRET_LENGTH = 12
+"""The shortest key or password Kittum accepts (`check_secrets`)."""
 
 # Passwords common enough to stand in ordinary text despite their length.
 _COMMON_SECRETS = frozenset({"administrator", "changeme1234", "password1234", "postgrespostgres"})
@@ -174,34 +175,44 @@ def _named_secrets(settings: Settings) -> list[tuple[str, str]]:
     return [(name, value) for name, value in named if value]
 
 
-def recording_secrets(settings: Settings) -> tuple[str, ...]:
-    """What no recording may hold: every configured key and password. The contact address is
-    handled apart (it may stand in its contact parameter, as a placeholder)."""
-    return tuple(dict.fromkeys(value for _, value in _named_secrets(settings)))
+def check_secrets(settings: Settings) -> None:
+    """The rule for every configured key and password: Kittum must be able to tell it from
+    ordinary content, so it is at least `SECRET_LENGTH` characters long, not a common password,
+    and not part of what Kittum itself sends (its name, the User-Agent, the stand-ins the scrub
+    writes). The scrub, the recording checks and the seal scan look for every one of them, and a
+    value ordinary content holds would turn up everywhere.
 
-
-def check_recording_secrets(settings: Settings) -> None:
-    """Refuse to record with a key or password that ordinary content could contain.
-
-    Recording refuses a request and cleans a body that holds a secret. A short password, a common
-    one, or one inside what Kittum itself sends (PubMed's `tool=kittum`, the User-Agent, the
-    contact placeholder) would refuse or redact requests and bodies that hold no secret at all."""
+    The server, the worker, the CLI, and recording refuse to start otherwise: this raises
+    `ConfigurationError` naming the setting and the rule."""
     own = [
-        s.lower()
-        for s in ("kittum", user_agent(), CONTACT_PLACEHOLDER, "[redacted]", REPLAY_PREFIX)
+        s.lower() for s in ("kittum", user_agent(), CONTACT_PLACEHOLDER, REDACTED, REPLAY_PREFIX)
     ]
     for name, value in _named_secrets(settings):
         folded = value.lower()
-        if len(value) < RECORDING_SECRET_LENGTH:
-            problem = f"of at least {RECORDING_SECRET_LENGTH} characters"
-        elif folded in _COMMON_SECRETS or any(folded in v for v in own):
-            problem = "that is not a common word or part of what Kittum sends"
-        else:
+        if (
+            len(value) >= SECRET_LENGTH
+            and folded not in _COMMON_SECRETS
+            and not any(folded in v for v in own)
+        ):
             continue
         raise ConfigurationError(
-            f"recording needs {name} to be a value {problem}, so that recording can tell it from"
-            " ordinary content; record with a longer one (docs/models-and-recordings.md)"
+            f"{name} must be at least {SECRET_LENGTH} characters long, not a common password,"
+            " and not part of what Kittum itself sends, so that Kittum can tell it from ordinary"
+            ' content; set a longer one (docs/sources.md, "Private values")'
         )
+
+
+def credentials(settings: Settings) -> Credentials:
+    """The deployment's private values: the settings the gateway places in requests, and every
+    other key and password, which nothing Kittum stores, caches, records, or seals may hold."""
+    return Credentials.of(
+        tuple(value for _, value in _named_secrets(settings)),
+        contact_email=settings.contact_email,
+        ncbi_api_key=settings.ncbi_api_key,
+        openalex_api_key=settings.openalex_api_key,
+        semantic_scholar_api_key=settings.semantic_scholar_api_key,
+        core_api_key=settings.core_api_key,
+    )
 
 
 def build_backends(
@@ -235,7 +246,7 @@ def build_backends(
         backends_from_endpoints(settings.llm_endpoints, registry, artifacts, client=client)
     )
     if settings.llm_record:
-        check_recording_secrets(settings)
+        check_secrets(settings)
         recordings = LlmRecordings(settings.llm_record)
         backends = {
             recipe_id: RecordingBackend(
@@ -243,7 +254,7 @@ def build_backends(
                 backend.recipe,
                 recordings,
                 artifacts,
-                sensitive=(*recording_secrets(settings), settings.contact_email),
+                sensitive=credentials(settings).private,
             )
             for recipe_id, backend in backends.items()
         }
@@ -321,20 +332,14 @@ def build_gateway(
             "KITTUM_GATEWAY_RECORD records the real sources, so it cannot run with KITTUM_OFFLINE=1"
         )
     if settings.gateway_record:
-        check_recording_secrets(settings)
+        check_secrets(settings)
+    private = credentials(settings)
     if settings.gateway_recordings:
-        transport = RecordedTransport(
-            settings.gateway_recordings, contact_email=settings.contact_email
-        )
+        transport = RecordedTransport(settings.gateway_recordings)
     else:
-        transport = transport or HttpxTransport(contact_email=settings.contact_email)
+        transport = transport or HttpxTransport()
         if settings.gateway_record:
-            transport = RecordingTransport(
-                transport,
-                settings.gateway_record,
-                contact_email=settings.contact_email,
-                secrets=recording_secrets(settings),
-            )
+            transport = RecordingTransport(transport, settings.gateway_record, credentials=private)
     in_memory = settings.offline or settings.gateway_record is not None
     return SourceGateway(
         database=db,
@@ -342,9 +347,8 @@ def build_gateway(
         buckets="memory" if settings.offline else "postgres",
         cache="memory" if in_memory else "postgres",
         artifacts=artifacts,
-        policies=default_policies(
-            contact_email=settings.contact_email, ncbi_api_key=settings.ncbi_api_key
-        ),
+        policies=default_policies(private),
+        credentials=private,
         clock=clock,
     )
 
@@ -369,6 +373,9 @@ class AppContext:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> AppContext:
+        """The context of a server, a worker, or a CLI command. Refuses a key or password Kittum
+        cannot tell from ordinary content (`check_secrets`)."""
+        check_secrets(settings)
         clock = SystemClock()
         db = Database(settings.database_url)
         artifacts = FilesystemStore(settings.artifact_dir)
@@ -508,7 +515,7 @@ def job_handlers(ctx: AppContext) -> dict[str, Handler]:
 
 __all__ = [
     "JOB_HANDLERS",
-    "RECORDING_SECRET_LENGTH",
+    "SECRET_LENGTH",
     "AppContext",
     "ConfigurationError",
     "HandlerFactory",
@@ -516,7 +523,7 @@ __all__ = [
     "build_backends",
     "build_gateway",
     "build_judge",
-    "check_recording_secrets",
+    "check_secrets",
     "ensure_actor",
     "job_handlers",
     "judge_config",

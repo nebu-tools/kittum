@@ -31,7 +31,13 @@ from kittum.app import (
 from kittum.app.demo import DATA
 from kittum.core import FixedClock, SystemClock
 from kittum.corpus import latest_revision, reports
-from kittum.gateway import HttpRequest, RecordedTransport, SourceGateway, request_hash
+from kittum.gateway import (
+    Credentials,
+    HttpRequest,
+    RecordedTransport,
+    SourceGateway,
+    request_hash,
+)
 from kittum.ledger import PostgresLedger
 from kittum.runs import JobContext, LeaseLost, PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
@@ -90,6 +96,7 @@ def _context(db: Database, sources: Sources) -> AppContext:
         gateway=SourceGateway(
             database=db,
             transport=sources,
+            credentials=Credentials.of(contact_email=CONTACT_EMAIL),
             artifacts=artifacts,
             buckets="memory",
             cache="memory",
@@ -230,10 +237,7 @@ def test_a_source_failure_counts_only_against_the_records_it_failed_for(pg: Tx) 
     )
     _only_this_project(pg, project)
     # Crossref is unreachable for one DOI, which the PubMed search and the CENTRAL export share.
-    sources.down.add(
-        "https://api.crossref.org/works/10.1001%2Fjamanetworkopen.2024.18120"
-        "?mailto=test%40kittum.dev"
-    )
+    sources.down.add("https://api.crossref.org/works/10.1001%2Fjamanetworkopen.2024.18120")
     assert ctx.queue is not None
     run = request_enrichment(
         pg,
@@ -329,10 +333,13 @@ def test_recordings_replace_the_sources_only_offline_and_stay_out_of_the_cache(p
         build_gateway(settings(offline=True), db, artifacts, SystemClock())
 
     gateway = build_gateway(
-        settings(gateway_recordings=STACK, offline=True), db, artifacts, SystemClock()
+        settings(gateway_recordings=STACK, offline=True, contact_email=CONTACT_EMAIL),
+        db,
+        artifacts,
+        SystemClock(),
     )
     request = HttpRequest(
-        url="https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4?email=test%40kittum.dev",
+        url="https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4",
         headers=(("Accept", "application/json"),),
     )
     first = gateway.fetch("unpaywall", request)

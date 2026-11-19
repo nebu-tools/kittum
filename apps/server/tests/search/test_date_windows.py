@@ -79,6 +79,9 @@ class SimulatedGateway:
     def fetch(self, _source: str, request: HttpRequest) -> HttpResponse:
         return self._transport.send(request)
 
+    def configured(self, _source: str) -> bool:
+        return True
+
 
 def test_date_window_splitting_produces_complete_non_overlapping_windows(
     caplog: pytest.LogCaptureFixture,

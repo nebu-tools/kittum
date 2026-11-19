@@ -29,14 +29,14 @@ jobs:
         image: postgres:18
         env:
           POSTGRES_USER: kittum
-          POSTGRES_PASSWORD: kittum
+          POSTGRES_PASSWORD: kittum-local-dev
           POSTGRES_DB: kittum
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U kittum" --health-interval 2s --health-timeout 3s
           --health-retries 30
     env:
-      KITTUM_DATABASE_URL: postgresql://kittum:kittum@127.0.0.1:5432/kittum
+      KITTUM_DATABASE_URL: postgresql://kittum:kittum-local-dev@127.0.0.1:5432/kittum
     defaults:
       run:
         working-directory: apps/server
@@ -52,7 +52,7 @@ jobs:
       - name: Migrate
         run: >-
           docker run --rm --network host -v "$PWD/db:/db"
-          -e DATABASE_URL="postgres://kittum:kittum@127.0.0.1:5432/kittum?sslmode=disable"
+          -e DATABASE_URL="postgres://kittum:kittum-local-dev@127.0.0.1:5432/kittum?sslmode=disable"
           ghcr.io/amacneil/dbmate:2 --migrations-dir /db/migrations --no-dump-schema --wait up
       - run: uv run --no-sync pytest
 
@@ -92,14 +92,14 @@ jobs:
         image: postgres:18
         env:
           POSTGRES_USER: kittum
-          POSTGRES_PASSWORD: kittum
+          POSTGRES_PASSWORD: kittum-local-dev
           POSTGRES_DB: kittum
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U kittum" --health-interval 2s --health-timeout 3s
           --health-retries 30
     env:
-      KITTUM_DATABASE_URL: postgresql://kittum:kittum@127.0.0.1:5432/kittum
+      KITTUM_DATABASE_URL: postgresql://kittum:kittum-local-dev@127.0.0.1:5432/kittum
     defaults:
       run:
         working-directory: .
@@ -122,7 +122,7 @@ jobs:
         working-directory: apps/server
         run: >-
           docker run --rm --network host -v "$PWD/db:/db"
-          -e DATABASE_URL="postgres://kittum:kittum@127.0.0.1:5432/kittum?sslmode=disable"
+          -e DATABASE_URL="postgres://kittum:kittum-local-dev@127.0.0.1:5432/kittum?sslmode=disable"
           ghcr.io/amacneil/dbmate:2 --migrations-dir /db/migrations --no-dump-schema --wait up
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium

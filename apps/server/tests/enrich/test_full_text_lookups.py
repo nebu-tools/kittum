@@ -14,7 +14,6 @@ import pytest
 
 from kittum.core import FixedClock
 from kittum.enrich import (
-    EnrichmentConfig,
     SourceUnavailable,
     WorkIds,
     europepmc,
@@ -22,12 +21,12 @@ from kittum.enrich import (
     lookup_full_text,
     skipped_source,
 )
-from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.gateway import Credentials, RecordedTransport, SourceGateway
 from kittum.gateway.testing import FakeTransport, PassThroughGateway
 from kittum.storage import MemoryStore
 from tests.documents.conftest import savepoint_db
 from tests.enrich.record_lookups import ARXIV, BIORXIV, LIVE_RUN_PMIDS, LOOKUPS, MEDRXIV
-from tests.enrich.support import CONTACT_EMAIL
+from tests.enrich.support import CREDENTIALS
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -36,7 +35,7 @@ if TYPE_CHECKING:
 
 class _Seen:
     def __init__(self) -> None:
-        self.inner = RecordedTransport(LOOKUPS, contact_email=CONTACT_EMAIL)
+        self.inner = RecordedTransport(LOOKUPS)
         self.urls: list[str] = []
 
     def send(self, request: HttpRequest) -> HttpResponse:
@@ -87,11 +86,10 @@ def test_europe_pmc_fails_in_its_own_words_then_answers_once_per_pmid(pg: Tx) ->
 
 
 def test_preprint_servers_and_arxiv_name_their_pdfs_with_licences_and_core_needs_a_key() -> None:
-    gateway = PassThroughGateway(RecordedTransport(LOOKUPS, contact_email=CONTACT_EMAIL))
-    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
+    gateway = PassThroughGateway(RecordedTransport(LOOKUPS), CREDENTIALS)
 
     def named(source: str, doi: str) -> list[tuple[str, str | None, str | None]]:
-        found = lookup_full_text(gateway, source, WorkIds(doi=doi), config=config)
+        found = lookup_full_text(gateway, source, WorkIds(doi=doi))
         assert found is not None
         return [(loc.url, loc.licence, loc.version) for loc in found.locations]
 
@@ -111,21 +109,21 @@ def test_preprint_servers_and_arxiv_name_their_pdfs_with_licences_and_core_needs
     ]
     # A journal article is not asked of the preprint servers.
     journal = WorkIds(doi="10.1186/s12916-026-04943-4", pmid="42174613")
-    assert [s for s in ("biorxiv", "arxiv") if lookup_applies(s, journal, config=config)] == []
+    assert [s for s in ("biorxiv", "arxiv") if lookup_applies(s, journal, gateway)] == []
 
     # CORE without a key is skipped, and says why; with one, the key goes in a header (never into
     # a URL or a recording) and a repository copy of the same DOI answers.
     # Semantic Scholar too is asked only with a key: its licence asks for permission before
     # commercial use.
-    assert skipped_source("semanticscholar", config) == (
+    assert skipped_source("semanticscholar", gateway) == (
         "no Semantic Scholar key is set (KITTUM_SEMANTIC_SCHOLAR_API_KEY)"
     )
-    assert not lookup_applies("semanticscholar", journal, config=config)
-    assert lookup_full_text(gateway, "semanticscholar", journal, config=config) is None
-    assert skipped_source("core", config) == "no CORE key is set (KITTUM_CORE_API_KEY)"
-    assert not lookup_applies("core", journal, config=config)
-    assert lookup_full_text(gateway, "core", journal, config=config) is None
-    keyed = config.model_copy(update={"core_api_key": "a-core-key-of-some-length"})
+    assert not lookup_applies("semanticscholar", journal, gateway)
+    assert lookup_full_text(gateway, "semanticscholar", journal) is None
+    assert skipped_source("core", gateway) == "no CORE key is set (KITTUM_CORE_API_KEY)"
+    assert not lookup_applies("core", journal, gateway)
+    assert lookup_full_text(gateway, "core", journal) is None
+    keyed = Credentials.of(contact_email="librarian@example.org", core_api_key="a-core-key-1")
     # Shaped as CORE documents its search answer: no key was at hand to record a real one.
     answer = {
         "totalHits": 1,
@@ -143,11 +141,13 @@ def test_preprint_servers_and_arxiv_name_their_pdfs_with_licences_and_core_needs
             ).encode()
         }
     )
-    found = lookup_full_text(PassThroughGateway(core), "core", journal, config=keyed)
+    found = lookup_full_text(PassThroughGateway(core, keyed), "core", journal)
     assert found is not None
     assert [(loc.url, loc.licence) for loc in found.locations] == [
         ("https://core.ac.uk/download/1.pdf", None)
     ]
     (sent,) = core.sent
-    assert ("Authorization", "Bearer a-core-key-of-some-length") in sent.headers
+    assert ("Authorization", "Bearer a-core-key-1") in sent.on_the_wire().headers
     assert "a-core-key" not in sent.url
+    assert "a-core-key" not in repr(sent)
+    assert "a-core-key" not in sent.model_dump_json()

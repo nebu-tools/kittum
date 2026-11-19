@@ -10,20 +10,13 @@ import type {
   PairAgreement,
   PrismaFlow,
   Progress,
-  RetrievalItem,
   ScreeningTable,
   StageInfo,
   StageProgressView,
 } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { formatDateTime } from "../../lib/format.ts";
-import {
-  isRegistryOnly,
-  MODE_LABELS,
-  modeLabel,
-  revealLabel,
-  sourceLabel,
-} from "../../lib/labels.ts";
+import { MODE_LABELS, modeLabel, revealLabel, sourceLabel } from "../../lib/labels.ts";
 import { Button } from "../../ui/Button.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { Page } from "../../ui/Page.tsx";
@@ -51,9 +44,6 @@ export function ProgressScreen() {
   const [ledger, setLedger] = useState<LedgerSummary | null>(null);
   // The ledger's PRISMA flow per scope: retrieval and studies included, for the lead.
   const [flows, setFlows] = useState<ReadonlyArray<PrismaFlow> | null>(null);
-  // Every report with its full text, to tell registry records (no article yet) from reports
-  // that need a PDF, as Retrieval does.
-  const [reports, setReports] = useState<ReadonlyArray<RetrievalItem> | null>(null);
   // Each stage as the lead's screening table has it: who decided what, and when.
   const [tables, setTables] = useState<ReadonlyArray<ScreeningTable>>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,10 +71,6 @@ export function ProgressScreen() {
       run(workbench.asOf({ ...caller, cutoffSeq: null })).then(
         (a) => live && setFlows(a.flows),
         () => live && setFlows(null),
-      );
-      run(workbench.fullTexts(caller)).then(
-        (r) => live && setReports(r),
-        () => live && setReports(null),
       );
       Promise.all(
         project.stages.map((s) =>
@@ -217,7 +203,6 @@ export function ProgressScreen() {
             <OpenWork
               progress={progress}
               flows={flows}
-              reports={reports}
               projectId={project.id}
               stageName={stageName}
             />
@@ -235,7 +220,6 @@ export function ProgressScreen() {
               <Flow
                 progress={progress}
                 flows={flows}
-                reports={reports}
                 lead={lead}
                 links={links}
                 sourceName={sourceName}
@@ -294,25 +278,14 @@ function Summary({ progress, lead }: { progress: Progress; lead: boolean }) {
 
 /** Sums over a scope: what is sought, retrieved, waiting for a PDF, and registry records with no
  * article yet. The last three add up to the first. */
-function retrieval(
-  view: StageProgressView | undefined,
-  flow: PrismaFlow | null,
-  reports: ReadonlyArray<RetrievalItem> | null,
-) {
+function retrieval(view: StageProgressView | undefined, flow: PrismaFlow | null) {
   const o = view?.outcomes;
   // Unclear at title and abstract means include: it is sought like an included record.
   const unclear = (o?.["unclear"] ?? 0) + (o?.["insufficient_information"] ?? 0);
   const sought = flow ? flow.reports_sought : o ? (o["include"] ?? 0) + unclear : null;
   const awaiting = flow ? flow.reports_not_retrieved : null;
   const retrieved = flow ? flow.reports_sought - flow.reports_not_retrieved : null;
-  const byRef = new Map((reports ?? []).map((r) => [r.item_ref, r]));
-  const registry =
-    flow && reports
-      ? (flow.members["reports_not_retrieved"] ?? []).filter((ref) => {
-          const item = byRef.get(ref);
-          return item !== undefined && isRegistryOnly(item);
-        }).length
-      : 0;
+  const registry = flow ? flow.reports_not_retrieved_registry : 0;
   const needPdf = awaiting === null ? null : awaiting - registry;
   return { sought, unclear, awaiting, retrieved, registry, needPdf };
 }
@@ -333,13 +306,11 @@ const WORK_ROUTES = {
 function OpenWork({
   progress,
   flows,
-  reports,
   projectId,
   stageName,
 }: {
   progress: Progress;
   flows: ReadonlyArray<PrismaFlow> | null;
-  reports: ReadonlyArray<RetrievalItem> | null;
   projectId: string;
   stageName: (s: StageProgressView) => string;
 }) {
@@ -378,7 +349,7 @@ function OpenWork({
       });
     }
     if (stage === "title_abstract") {
-      const { needPdf } = retrieval(view, flowOf(flows, scope), reports);
+      const { needPdf } = retrieval(view, flowOf(flows, scope));
       if (needPdf) {
         items.push({
           key: `${scope}-need-pdf`,
@@ -511,7 +482,6 @@ function Side({
 function Flow({
   progress,
   flows,
-  reports,
   lead,
   links,
   sourceName,
@@ -519,7 +489,6 @@ function Flow({
 }: {
   progress: Progress;
   flows: ReadonlyArray<PrismaFlow> | null;
-  reports: ReadonlyArray<RetrievalItem> | null;
   lead: boolean;
   links: Links;
   sourceName: (id: string) => string;
@@ -579,7 +548,7 @@ function Flow({
     const ft = at("full_text");
     const flow = lead ? flowOf(flows, scope) : null;
     const suffix = scopeLabel ? `, ${scopeLabel(scope)}` : "";
-    const r = retrieval(ta, flow, reports);
+    const r = retrieval(ta, flow);
     if (ta) {
       rows.push({ phase: `Screening${suffix}`, key: `phase-screening-${scope}` });
       rows.push(screenedStep(ta, lead, links, null));

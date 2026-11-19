@@ -16,8 +16,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from kittum.enrich import EnrichmentConfig, WorkIds, europepmc, lookup_full_text
-from kittum.gateway import HttpxTransport, RecordingTransport
+from kittum.enrich import WorkIds, europepmc, lookup_full_text
+from kittum.gateway import Credentials, HttpxTransport, RecordingTransport
 from kittum.gateway.testing import PassThroughGateway
 from tests.enrich.support import CONTACT_EMAIL, FIXTURES
 
@@ -65,14 +65,12 @@ def live_run_dois(live_run: Path) -> list[str]:
 
 def main(live_run: Path) -> None:
     LOOKUPS.mkdir(exist_ok=True)
-    transport = RecordingTransport(
-        HttpxTransport(contact_email=CONTACT_EMAIL), LOOKUPS, contact_email=CONTACT_EMAIL
-    )
-    gateway = PassThroughGateway(transport)
-    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
+    credentials = Credentials.of(contact_email=CONTACT_EMAIL)
+    transport = RecordingTransport(HttpxTransport(), LOOKUPS, credentials=credentials)
+    gateway = PassThroughGateway(transport, credentials)
     for doi in (MEDRXIV, BIORXIV):
-        lookup_full_text(gateway, "biorxiv", WorkIds(doi=doi), config=config)
-    lookup_full_text(gateway, "arxiv", WorkIds(doi=ARXIV), config=config)
+        lookup_full_text(gateway, "biorxiv", WorkIds(doi=doi))
+    lookup_full_text(gateway, "arxiv", WorkIds(doi=ARXIV))
     dois = live_run_dois(live_run)
     europepmc.works(gateway, pmids=LIVE_RUN_PMIDS, dois=dois, batch_size=100)
     manifest = json.loads((LOOKUPS / "manifest.json").read_text())

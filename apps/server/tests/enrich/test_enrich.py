@@ -18,10 +18,9 @@ from kittum.enrich import (
     full_text_candidates,
     pubtator,
 )
-from kittum.gateway import HttpResponse
+from kittum.gateway import HttpResponse, unreached
 from kittum.search import SourceRecord
 from tests.enrich.support import (
-    CONTACT_EMAIL,
     DERIVED_RELATION_FIXTURE,
     FIXTURES,
     RETRACTION_NOTICE,
@@ -46,7 +45,7 @@ _RETRACTION_NOTICE = "10.1016/s0140-6736(20)31324-6"
 
 
 class _DownGateway:
-    """A gateway whose named sources are out of budget."""
+    """A gateway whose named sources do not answer in time."""
 
     def __init__(self, inner: Gateway, *sources: str) -> None:
         self._inner = inner
@@ -54,8 +53,11 @@ class _DownGateway:
 
     def fetch(self, source: str, request: HttpRequest) -> HttpResponse:
         if source in self._sources:
-            raise TimeoutError(f"{source} is out of budget")
+            raise unreached(source, TimeoutError(f"{source} timed out"))
         return self._inner.fetch(source, request)
+
+    def configured(self, source: str) -> bool:
+        return self._inner.configured(source)
 
 
 class _OnlyCrossref:
@@ -66,13 +68,16 @@ class _OnlyCrossref:
 
     def fetch(self, source: str, _request: HttpRequest) -> HttpResponse:
         if source != "crossref":
-            raise TimeoutError(f"{source} is out of budget")
+            raise unreached(source, TimeoutError(f"{source} timed out"))
         return HttpResponse(
             status=200,
             headers=(),
             body=self._body,
             body_hash=sha256_hex(self._body),
         )
+
+    def configured(self, _source: str) -> bool:
+        return True
 
 
 def _project(tx: Tx) -> uuid.UUID:
@@ -219,7 +224,9 @@ def test_openalex_outage_falls_back_to_europe_pmc(pg: Tx) -> None:
 
     assert result.failures == (
         SourceFailure(
-            source="openalex", reason="TimeoutError: openalex is out of budget", kind="unreachable"
+            source="openalex",
+            reason="openalex is unreachable: it did not answer in time (TimeoutError)",
+            kind="unreachable",
         ),
     )
     by_pmid = _by_pmid(result.records)
@@ -370,8 +377,8 @@ def test_bioc_offsets_map_chloroquine_mentions_to_whole_words(pg: Tx) -> None:
 
 def test_retraction_notice_is_not_flagged_but_the_original_is() -> None:
     gateway, _ = replay_gateway()
-    notice = crossref.work(gateway, RETRACTION_NOTICE, email=CONTACT_EMAIL)
-    original = crossref.work(gateway, RETRACTION_ORIGINAL, email=CONTACT_EMAIL)
+    notice = crossref.work(gateway, RETRACTION_NOTICE)
+    original = crossref.work(gateway, RETRACTION_ORIGINAL)
     assert notice is not None
     assert original is not None
 

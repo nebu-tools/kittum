@@ -26,6 +26,7 @@ import yaml
 from kittum import assist
 from kittum.app import recorded_backend
 from kittum.core import new_id
+from kittum.gateway import Credentials
 from kittum.gateway.testing import PassThroughGateway
 from kittum.models import (
     BackendError,
@@ -144,11 +145,12 @@ def _write_answers(recipe_id: str, backend: Recorder) -> None:
 
 def _record_counts(strategies: list[tuple[str, str]], store: MemoryStore) -> None:
     COUNTS.mkdir(parents=True, exist_ok=True)
-    transport = RecordingTransport(COUNTS)
-    gateway = PassThroughGateway(transport)
+    credentials = Credentials.of(contact_email=CONTACT_EMAIL)
+    transport = RecordingTransport(COUNTS, credentials)
+    gateway = PassThroughGateway(transport, credentials)
     for dialect, strategy in dict.fromkeys(strategies):
         time.sleep(1)  # PubMed allows three requests a second without a key
-        found = count_hits(gateway, store, dialect, strategy, contact_email=CONTACT_EMAIL)
+        found = count_hits(gateway, store, dialect, strategy)
         print(f"{dialect} {found.count:>7}  {strategy[:90]}")
     transport.write_manifest()
     _point_stack_at()
